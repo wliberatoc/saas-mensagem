@@ -1,26 +1,15 @@
 import {
-    createContext,
     useEffect,
     useState,
     type ReactNode,
 } from 'react';
-
 import {
     onAuthStateChanged,
     type User,
 } from 'firebase/auth';
 
 import { auth } from '../services/firebase';
-
-type AuthContextData = {
-    user: User | null;
-    loading: boolean;
-};
-
-// This context must remain colocated with its provider because only this file
-// is available for the auth context implementation.
-// eslint-disable-next-line react-refresh/only-export-components
-export const AuthContext = createContext<AuthContextData | undefined>(undefined);
+import { AuthContext } from './auth-context';
 
 type AuthProviderProps = {
     children: ReactNode;

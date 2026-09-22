@@ -11,39 +11,35 @@ import {
     Typography,
 } from '@mui/material';
 import { FirebaseError } from 'firebase/app';
-import { Link as RouterLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../hooks/useAuth';
-import { login as loginWithEmailAndPassword } from '../../services/auth';
+import { register } from '../../services/auth';
 
-type LoginLocationState = {
-    from?: string;
-};
-
-function getLoginErrorMessage(error: unknown) {
+function getRegisterErrorMessage(error: unknown) {
     if (!(error instanceof FirebaseError)) {
-        return 'Não foi possível entrar. Tente novamente.';
+        return 'Não foi possível criar sua conta. Tente novamente.';
     }
 
     const messages: Record<string, string> = {
-        'auth/invalid-credential': 'E-mail ou senha incorretos.',
+        'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
         'auth/invalid-email': 'Informe um endereço de e-mail válido.',
         'auth/network-request-failed': 'Verifique sua conexão com a internet.',
         'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
-        'auth/user-disabled': 'Este usuário está desativado.',
+        'auth/weak-password': 'A senha deve ter pelo menos 6 caracteres.',
     };
 
-    return messages[error.code] ?? 'Não foi possível entrar. Tente novamente.';
+    return messages[error.code] ?? 'Não foi possível criar sua conta. Tente novamente.';
 }
 
-export function LoginPage() {
+export function RegisterPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [passwordConfirmation, setPasswordConfirmation] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { user } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
 
     if (user) {
         return <Navigate to="/dashboard" replace />;
@@ -52,14 +48,19 @@ export function LoginPage() {
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setErrorMessage('');
+
+        if (password !== passwordConfirmation) {
+            setErrorMessage('As senhas não coincidem.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
-            await loginWithEmailAndPassword(email.trim(), password);
-            const state = location.state as LoginLocationState | null;
-            navigate(state?.from ?? '/dashboard', { replace: true });
+            await register(email.trim(), password);
+            navigate('/dashboard', { replace: true });
         } catch (error) {
-            setErrorMessage(getLoginErrorMessage(error));
+            setErrorMessage(getRegisterErrorMessage(error));
         } finally {
             setIsSubmitting(false);
         }
@@ -83,10 +84,10 @@ export function LoginPage() {
                         component="h1"
                         sx={{ fontSize: { lg: '3.25rem', xl: '4rem' }, fontWeight: 700, lineHeight: 1.08 }}
                     >
-                        Mensagens certas, para as pessoas certas.
+                        Comece a se comunicar melhor hoje.
                     </Typography>
                     <Typography className="mt-6 max-w-lg text-white/70" sx={{ fontSize: '1.1rem' }}>
-                        Organize conexões, contatos e campanhas em um único lugar.
+                        Crie sua conta para organizar conexões, contatos e campanhas em um único lugar.
                     </Typography>
                 </div>
 
@@ -111,10 +112,10 @@ export function LoginPage() {
                         <Stack spacing={3}>
                             <div>
                                 <Typography component="h1" variant="h4" sx={{ fontWeight: 700 }}>
-                                    Bem-vindo de volta
+                                    Crie sua conta
                                 </Typography>
                                 <Typography className="mt-2" color="text.secondary">
-                                    Entre com suas credenciais para continuar.
+                                    Preencha seus dados para começar.
                                 </Typography>
                             </div>
 
@@ -139,7 +140,19 @@ export function LoginPage() {
                                 type="password"
                                 value={password}
                                 onChange={(event) => setPassword(event.target.value)}
-                                autoComplete="current-password"
+                                autoComplete="new-password"
+                                helperText="Use pelo menos 6 caracteres."
+                                slotProps={{ htmlInput: { minLength: 6 } }}
+                                required
+                                fullWidth
+                            />
+                            <TextField
+                                label="Confirme sua senha"
+                                type="password"
+                                value={passwordConfirmation}
+                                onChange={(event) => setPasswordConfirmation(event.target.value)}
+                                autoComplete="new-password"
+                                slotProps={{ htmlInput: { minLength: 6 } }}
                                 required
                                 fullWidth
                             />
@@ -150,18 +163,18 @@ export function LoginPage() {
                                 disabled={isSubmitting}
                                 sx={{ minHeight: 48, borderRadius: 2.5, textTransform: 'none', fontWeight: 700 }}
                             >
-                                {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Entrar'}
+                                {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Criar conta'}
                             </Button>
 
                             <Typography align="center" color="text.secondary" variant="body2">
-                                Não tem uma conta?{' '}
+                                Já tem uma conta?{' '}
                                 <Link
                                     component={RouterLink}
-                                    to="/cadastro"
+                                    to="/login"
                                     underline="hover"
                                     sx={{ fontWeight: 700 }}
                                 >
-                                    Cadastre-se
+                                    Entrar
                                 </Link>
                             </Typography>
                         </Stack>

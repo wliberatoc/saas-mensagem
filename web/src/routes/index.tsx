@@ -5,6 +5,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 import { useAuth } from '../hooks/useAuth';
 import { DashboardPage } from '../pages/Dashboard';
 import { LoginPage } from '../pages/Login';
+import { RegisterPage } from '../pages/Register';
 
 export const AppRoutes = () => {
     const { loading, user } = useAuth();
@@ -20,6 +21,7 @@ export const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/cadastro" element={<RegisterPage />} />
             <Route
                 path="/dashboard"
                 element={(

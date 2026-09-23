@@ -13,6 +13,7 @@ import {
     Typography,
 } from '@mui/material';
 
+import { ContactsSection } from '../../components/ContactsSection';
 import { useAuth } from '../../hooks/useAuth';
 import { logout } from '../../services/auth';
 import { subscribeToConnections } from '../../services/connections';
@@ -170,6 +171,13 @@ export function DashboardPage() {
                             </Card>
                         ))}
                     </div>
+                )}
+
+                {user && (
+                    <>
+                        <Divider className="my-10" />
+                        <ContactsSection clientId={user.uid} />
+                    </>
                 )}
             </main>
         </div>

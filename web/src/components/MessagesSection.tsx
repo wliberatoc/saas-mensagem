@@ -122,7 +122,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
         const normalizedContent = content.trim();
         const recipients = contacts
             .filter((contact) => selectedContactIds.includes(contact.id))
-            .map((contact) => ({ contactId: contact.id, name: contact.name, phone: contact.phone }));
+            .map((contact) => ({ contactId: contact.id, phone: contact.phone }));
         const scheduledDate = isScheduled ? new Date(scheduledAt) : null;
 
         if (!normalizedContent) {
@@ -207,7 +207,11 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                 </Paper>
             ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
-                    {filteredMessages.map((message) => (
+                    {filteredMessages.map((message) => {
+                        const contact = contacts.find(({ id }) => id === message.recipient.contactId);
+                        const hasOldPhone = Boolean(contact && contact.phone !== message.recipient.phone);
+
+                        return (
                         <Card key={message.id} variant="outlined" className="rounded-2xl border-slate-200">
                             <CardContent>
                                 <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -218,7 +222,12 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                                 </Stack>
                                 <Typography sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{message.content}</Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                                    Para: {message.recipient.name}
+                                    Para: {contact?.name ?? 'Contato não encontrado'}
+                                    {hasOldPhone && (
+                                        <Box component="span" title="número antigo" sx={{ color: '#a0a0a1' }}>
+                                            {' '}{message.recipient.phone}
+                                        </Box>
+                                    )}
                                 </Typography>
                             </CardContent>
                             <CardActions>
@@ -226,7 +235,8 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                                 <Button color="error" onClick={() => setMessageToDelete(message)}>Excluir</Button>
                             </CardActions>
                         </Card>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 

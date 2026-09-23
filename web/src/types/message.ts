@@ -4,7 +4,6 @@ export type MessageStatus = 'scheduled' | 'sent';
 
 export type MessageRecipient = {
     contactId: string;
-    name: string;
     phone: string;
 };
 

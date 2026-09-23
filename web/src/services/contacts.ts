@@ -18,12 +18,14 @@ import { db } from './firebase';
 
 export function subscribeToContacts(
     clientId: string,
+    connectionId: string,
     onContactsChange: (contacts: Contact[]) => void,
     onError: (error: FirestoreError) => void,
 ): Unsubscribe {
     const contactsQuery = query(
         collection(db, 'contacts'),
         where('clientId', '==', clientId),
+        where('connectionId', '==', connectionId),
     );
 
     return onSnapshot(
@@ -36,6 +38,7 @@ export function subscribeToContacts(
                     return {
                         id: contactDocument.id,
                         clientId: data.clientId as string,
+                        connectionId: data.connectionId as string,
                         name: data.name as string,
                         phone: data.phone as string,
                         createdAt: data.createdAt instanceof Timestamp
@@ -57,6 +60,7 @@ export function subscribeToContacts(
 export function createContact(clientId: string, contact: ContactInput) {
     return addDoc(collection(db, 'contacts'), {
         clientId,
+        connectionId: contact.connectionId,
         name: contact.name,
         phone: contact.phone,
         createdAt: serverTimestamp(),
@@ -66,6 +70,7 @@ export function createContact(clientId: string, contact: ContactInput) {
 
 export function updateContact(contactId: string, contact: ContactInput) {
     return updateDoc(doc(db, 'contacts', contactId), {
+        connectionId: contact.connectionId,
         name: contact.name,
         phone: contact.phone,
         updatedAt: serverTimestamp(),

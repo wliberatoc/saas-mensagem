@@ -5,4 +5,9 @@ export type Connection = {
     clientId: string;
     name: string;
     createdAt: Timestamp | null;
+    updatedAt: Timestamp | null;
+};
+
+export type ConnectionInput = {
+    name: string;
 };

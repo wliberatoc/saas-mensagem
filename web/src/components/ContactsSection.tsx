@@ -8,7 +8,11 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControl,
+    InputLabel,
+    MenuItem,
     Paper,
+    Select,
     Stack,
     Table,
     TableBody,
@@ -27,9 +31,12 @@ import {
     updateContact,
 } from '../services/contacts';
 import type { Contact } from '../types/contact';
+import type { Connection } from '../types/connection';
 
 type ContactsSectionProps = {
     clientId: string;
+    connectionId: string;
+    connections: Connection[];
 };
 
 function formatPhone(value: string) {
@@ -55,7 +62,7 @@ function formatPhone(value: string) {
     return `(${areaCode}) ${number.slice(0, prefixLength)}-${number.slice(prefixLength)}`;
 }
 
-export function ContactsSection({ clientId }: ContactsSectionProps) {
+export function ContactsSection({ clientId, connectionId, connections }: ContactsSectionProps) {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -67,10 +74,12 @@ export function ContactsSection({ clientId }: ContactsSectionProps) {
     const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
+    const [selectedConnectionId, setSelectedConnectionId] = useState(connectionId);
 
     useEffect(() => {
         return subscribeToContacts(
             clientId,
+            connectionId,
             (updatedContacts) => {
                 setContacts(updatedContacts);
                 setIsLoading(false);
@@ -80,12 +89,13 @@ export function ContactsSection({ clientId }: ContactsSectionProps) {
                 setIsLoading(false);
             },
         );
-    }, [clientId]);
+    }, [clientId, connectionId]);
 
     function openCreateForm() {
         setEditingContact(null);
         setName('');
         setPhone('');
+        setSelectedConnectionId(connectionId);
         setFormErrorMessage('');
         setIsFormOpen(true);
     }
@@ -94,6 +104,7 @@ export function ContactsSection({ clientId }: ContactsSectionProps) {
         setEditingContact(contact);
         setName(contact.name);
         setPhone(formatPhone(contact.phone));
+        setSelectedConnectionId(contact.connectionId);
         setFormErrorMessage('');
         setIsFormOpen(true);
     }
@@ -109,12 +120,13 @@ export function ContactsSection({ clientId }: ContactsSectionProps) {
         setFormErrorMessage('');
 
         const contactData = {
+            connectionId: selectedConnectionId,
             name: name.trim(),
             phone: phone.trim(),
         };
 
-        if (!contactData.name || !contactData.phone) {
-            setFormErrorMessage('Preencha o nome e o telefone.');
+        if (!contactData.connectionId || !contactData.name || !contactData.phone) {
+            setFormErrorMessage('Selecione a conexão e preencha o nome e o telefone.');
             return;
         }
 
@@ -250,6 +262,19 @@ export function ContactsSection({ clientId }: ContactsSectionProps) {
                                     {formErrorMessage}
                                 </Alert>
                             )}
+                            <FormControl fullWidth required>
+                                <InputLabel id="contact-connection-label">Conexão</InputLabel>
+                                <Select
+                                    labelId="contact-connection-label"
+                                    label="Conexão"
+                                    value={selectedConnectionId}
+                                    onChange={(event) => setSelectedConnectionId(event.target.value)}
+                                >
+                                    {connections.map((connection) => (
+                                        <MenuItem key={connection.id} value={connection.id}>{connection.name}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                             <TextField
                                 label="Nome"
                                 value={name}

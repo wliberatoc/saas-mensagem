@@ -3,6 +3,7 @@ import type { Timestamp } from 'firebase/firestore';
 export type Contact = {
     id: string;
     clientId: string;
+    connectionId: string;
     name: string;
     phone: string;
     createdAt: Timestamp | null;
@@ -10,6 +11,7 @@ export type Contact = {
 };
 
 export type ContactInput = {
+    connectionId: string;
     name: string;
     phone: string;
 };

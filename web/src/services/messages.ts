@@ -1,5 +1,4 @@
 import {
-    addDoc,
     collection,
     deleteDoc,
     doc,
@@ -9,6 +8,7 @@ import {
     Timestamp,
     updateDoc,
     where,
+    writeBatch,
     type FirestoreError,
     type Unsubscribe,
 } from 'firebase/firestore';
@@ -39,7 +39,7 @@ export function subscribeToMessages(
                     clientId: data.clientId as string,
                     connectionId: data.connectionId as string,
                     content: data.content as string,
-                    recipients: Array.isArray(data.recipients) ? data.recipients : [],
+                    recipient: data.recipient as Message['recipient'],
                     status: data.status as Message['status'],
                     scheduledAt: data.scheduledAt instanceof Timestamp ? data.scheduledAt : null,
                     sentAt: data.sentAt instanceof Timestamp ? data.sentAt : null,
@@ -56,20 +56,29 @@ export function subscribeToMessages(
     );
 }
 
-export function createMessage(clientId: string, connectionId: string, message: MessageInput) {
-    const isScheduled = message.scheduledAt !== null;
+export async function createMessages(clientId: string, connectionId: string, messages: MessageInput[]) {
+    for (let offset = 0; offset < messages.length; offset += 500) {
+        const batch = writeBatch(db);
 
-    return addDoc(collection(db, 'messages'), {
-        clientId,
-        connectionId,
-        content: message.content,
-        recipients: message.recipients,
-        status: isScheduled ? 'scheduled' : 'sent',
-        scheduledAt: isScheduled ? Timestamp.fromDate(message.scheduledAt as Date) : null,
-        sentAt: isScheduled ? null : serverTimestamp(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
+        messages.slice(offset, offset + 500).forEach((message) => {
+            const isScheduled = message.scheduledAt !== null;
+            const messageReference = doc(collection(db, 'messages'));
+
+            batch.set(messageReference, {
+                clientId,
+                connectionId,
+                content: message.content,
+                recipient: message.recipient,
+                status: isScheduled ? 'scheduled' : 'sent',
+                scheduledAt: isScheduled ? Timestamp.fromDate(message.scheduledAt as Date) : null,
+                sentAt: isScheduled ? null : serverTimestamp(),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            });
+        });
+
+        await batch.commit();
+    }
 }
 
 export function updateScheduledMessage(messageId: string, message: MessageInput) {
@@ -79,7 +88,7 @@ export function updateScheduledMessage(messageId: string, message: MessageInput)
 
     return updateDoc(doc(db, 'messages', messageId), {
         content: message.content,
-        recipients: message.recipients,
+        recipient: message.recipient,
         scheduledAt: Timestamp.fromDate(message.scheduledAt),
         updatedAt: serverTimestamp(),
     });

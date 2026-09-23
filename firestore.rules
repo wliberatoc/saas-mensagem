@@ -56,11 +56,11 @@ service cloud.firestore {
 
     function hasValidMessageData() {
       return request.resource.data.keys().hasAll([
-          'clientId', 'connectionId', 'content', 'recipients', 'status',
+          'clientId', 'connectionId', 'content', 'recipient', 'status',
           'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'clientId', 'connectionId', 'content', 'recipients', 'status',
+          'clientId', 'connectionId', 'content', 'recipient', 'status',
           'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.clientId is string
@@ -68,9 +68,17 @@ service cloud.firestore {
         && request.resource.data.content is string
         && request.resource.data.content.size() > 0
         && request.resource.data.content.size() <= 4000
-        && request.resource.data.recipients is list
-        && request.resource.data.recipients.size() > 0
-        && request.resource.data.recipients.size() <= 500
+        && request.resource.data.recipient is map
+        && request.resource.data.recipient.keys().hasAll(['contactId', 'name', 'phone'])
+        && request.resource.data.recipient.keys().hasOnly(['contactId', 'name', 'phone'])
+        && request.resource.data.recipient.contactId is string
+        && request.resource.data.recipient.contactId.size() > 0
+        && request.resource.data.recipient.name is string
+        && request.resource.data.recipient.name.size() > 0
+        && request.resource.data.recipient.name.size() <= 120
+        && request.resource.data.recipient.phone is string
+        && request.resource.data.recipient.phone.size() > 0
+        && request.resource.data.recipient.phone.size() <= 30
         && request.resource.data.status in ['scheduled', 'sent']
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp

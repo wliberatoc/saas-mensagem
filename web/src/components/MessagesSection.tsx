@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 
 import { subscribeToContacts } from '../services/contacts';
-import { createMessage, deleteMessage, subscribeToMessages, updateScheduledMessage } from '../services/messages';
+import { createMessages, deleteMessage, subscribeToMessages, updateScheduledMessage } from '../services/messages';
 import type { Contact } from '../types/contact';
 import type { Message, MessageStatus } from '../types/message';
 
@@ -99,7 +99,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     function openEditForm(message: Message) {
         setEditingMessage(message);
         setContent(message.content);
-        setSelectedContactIds(message.recipients.map((recipient) => recipient.contactId));
+        setSelectedContactIds([message.recipient.contactId]);
         setIsScheduled(true);
         setScheduledAt(message.scheduledAt ? toDateTimeLocal(message.scheduledAt.toDate()) : defaultScheduledAt());
         setFormErrorMessage('');
@@ -107,6 +107,11 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     }
 
     function toggleContact(contactId: string) {
+        if (editingMessage) {
+            setSelectedContactIds([contactId]);
+            return;
+        }
+
         setSelectedContactIds((current) => current.includes(contactId)
             ? current.filter((id) => id !== contactId)
             : [...current, contactId]);
@@ -128,6 +133,10 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
             setFormErrorMessage('Selecione ao menos um contato desta conexão.');
             return;
         }
+        if (editingMessage && recipients.length !== 1) {
+            setFormErrorMessage('Selecione um destinatário para esta mensagem.');
+            return;
+        }
         if (isScheduled && (!scheduledDate || Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date())) {
             setFormErrorMessage('Escolha uma data futura para o agendamento.');
             return;
@@ -136,9 +145,19 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
         setIsSaving(true);
         setFormErrorMessage('');
         try {
-            const messageInput = { content: normalizedContent, recipients, scheduledAt: scheduledDate };
-            if (editingMessage) await updateScheduledMessage(editingMessage.id, messageInput);
-            else await createMessage(clientId, connectionId, messageInput);
+            if (editingMessage) {
+                await updateScheduledMessage(editingMessage.id, {
+                    content: normalizedContent,
+                    recipient: recipients[0],
+                    scheduledAt: scheduledDate,
+                });
+            } else {
+                await createMessages(clientId, connectionId, recipients.map((recipient) => ({
+                    content: normalizedContent,
+                    recipient,
+                    scheduledAt: scheduledDate,
+                })));
+            }
             setIsFormOpen(false);
         } catch {
             setFormErrorMessage(`Não foi possível ${editingMessage ? 'atualizar' : 'criar'} a mensagem.`);
@@ -199,7 +218,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                                 </Stack>
                                 <Typography sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{message.content}</Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                                    Para: {message.recipients.map((recipient) => recipient.name).join(', ')}
+                                    Para: {message.recipient.name}
                                 </Typography>
                             </CardContent>
                             <CardActions>
@@ -219,7 +238,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                             {formErrorMessage && <Alert severity="error">{formErrorMessage}</Alert>}
                             <TextField label="Mensagem" value={content} onChange={(event) => setContent(event.target.value)} multiline minRows={4} required slotProps={{ htmlInput: { maxLength: 4000 } }} />
                             <div>
-                                <Typography variant="subtitle2" sx={{ mb: 1 }}>Destinatários</Typography>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>{editingMessage ? 'Destinatário' : 'Destinatários'}</Typography>
                                 <Paper variant="outlined" sx={{ maxHeight: 220, overflow: 'auto', p: 1 }}>
                                     <FormGroup>
                                         {contacts.map((contact) => (

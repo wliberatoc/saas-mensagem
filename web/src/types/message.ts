@@ -13,7 +13,7 @@ export type Message = {
     clientId: string;
     connectionId: string;
     content: string;
-    recipients: MessageRecipient[];
+    recipient: MessageRecipient;
     status: MessageStatus;
     scheduledAt: Timestamp | null;
     sentAt: Timestamp | null;
@@ -23,6 +23,6 @@ export type Message = {
 
 export type MessageInput = {
     content: string;
-    recipients: MessageRecipient[];
+    recipient: MessageRecipient;
     scheduledAt: Date | null;
 };

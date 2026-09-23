@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 initializeApp();
@@ -19,6 +20,10 @@ export const sendScheduledMessages = onSchedule(
             .where('status', '==', 'scheduled')
             .where('scheduledAt', '<=', sentAt)
             .get();
+
+        logger.info('Finished scanning for scheduled messages.', {
+            found: scheduledMessages.size,
+        });
 
         if (scheduledMessages.empty) {
             return;
@@ -42,5 +47,9 @@ export const sendScheduledMessages = onSchedule(
 
             await batch.commit();
         }
+
+        logger.info('Scheduled messages marked as sent.', {
+            updated: scheduledMessages.size,
+        });
     },
 );

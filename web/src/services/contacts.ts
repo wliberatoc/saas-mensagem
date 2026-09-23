@@ -13,7 +13,7 @@ import {
     type Unsubscribe,
 } from 'firebase/firestore';
 
-import type { Contact, ContactInput } from '../types/contact';
+import type { Contact, ContactInput, ContactUpdateInput } from '../types/contact';
 import { db } from './firebase';
 
 export function subscribeToContacts(
@@ -68,9 +68,8 @@ export function createContact(clientId: string, contact: ContactInput) {
     });
 }
 
-export function updateContact(contactId: string, contact: ContactInput) {
+export function updateContact(contactId: string, contact: ContactUpdateInput) {
     return updateDoc(doc(db, 'contacts', contactId), {
-        connectionId: contact.connectionId,
         name: contact.name,
         phone: contact.phone,
         updatedAt: serverTimestamp(),

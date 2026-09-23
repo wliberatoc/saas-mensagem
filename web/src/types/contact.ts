@@ -15,3 +15,8 @@ export type ContactInput = {
     name: string;
     phone: string;
 };
+
+export type ContactUpdateInput = {
+    name: string;
+    phone: string;
+};

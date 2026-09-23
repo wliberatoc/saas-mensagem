@@ -119,14 +119,16 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
         event.preventDefault();
         setFormErrorMessage('');
 
-        const contactData = {
-            connectionId: selectedConnectionId,
-            name: name.trim(),
-            phone: phone.trim(),
-        };
+        const normalizedName = name.trim();
+        const normalizedPhone = phone.trim();
 
-        if (!contactData.connectionId || !contactData.name || !contactData.phone) {
-            setFormErrorMessage('Selecione a conexão e preencha o nome e o telefone.');
+        if (!normalizedName || !normalizedPhone) {
+            setFormErrorMessage('Preencha o nome e o telefone.');
+            return;
+        }
+
+        if (!editingContact && !selectedConnectionId) {
+            setFormErrorMessage('Selecione a conexão.');
             return;
         }
 
@@ -134,9 +136,16 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 
         try {
             if (editingContact) {
-                await updateContact(editingContact.id, contactData);
+                await updateContact(editingContact.id, {
+                    name: normalizedName,
+                    phone: normalizedPhone,
+                });
             } else {
-                await createContact(clientId, contactData);
+                await createContact(clientId, {
+                    connectionId: selectedConnectionId,
+                    name: normalizedName,
+                    phone: normalizedPhone,
+                });
             }
 
             setIsFormOpen(false);
@@ -262,19 +271,21 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
                                     {formErrorMessage}
                                 </Alert>
                             )}
-                            <FormControl fullWidth required>
-                                <InputLabel id="contact-connection-label">Conexão</InputLabel>
-                                <Select
-                                    labelId="contact-connection-label"
-                                    label="Conexão"
-                                    value={selectedConnectionId}
-                                    onChange={(event) => setSelectedConnectionId(event.target.value)}
-                                >
-                                    {connections.map((connection) => (
-                                        <MenuItem key={connection.id} value={connection.id}>{connection.name}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                            {!editingContact && (
+                                <FormControl fullWidth required>
+                                    <InputLabel id="contact-connection-label">Conexão</InputLabel>
+                                    <Select
+                                        labelId="contact-connection-label"
+                                        label="Conexão"
+                                        value={selectedConnectionId}
+                                        onChange={(event) => setSelectedConnectionId(event.target.value)}
+                                    >
+                                        {connections.map((connection) => (
+                                            <MenuItem key={connection.id} value={connection.id}>{connection.name}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            )}
                             <TextField
                                 label="Nome"
                                 value={name}

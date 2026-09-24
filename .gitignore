@@ -2,6 +2,8 @@
 web/node_modules/
 functions/node_modules/
 
+docs/
+
 # Build output
 web/dist/
 web/dist-ssr/

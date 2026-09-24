@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Paper, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Paper, Tab, Tabs } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { AppHeader } from '../../components/AppHeader';
 import { ContactsSection } from '../../components/ContactsSection';
 import { MessagesSection } from '../../components/MessagesSection';
 import { useAuth } from '../../hooks/useAuth';
@@ -62,16 +63,11 @@ export function ConnectionDetailsPage() {
 
     return (
         <div className="min-h-screen bg-slate-100 text-slate-950">
-            <header className="border-b border-slate-200 bg-white">
-                <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-4 sm:px-8">
-                    <Button color="inherit" onClick={() => navigate('/dashboard')} sx={{ textTransform: 'none' }}>← Dashboard</Button>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div className="min-w-0">
-                        <Typography noWrap sx={{ fontWeight: 800 }}>{connection.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">Área da conexão</Typography>
-                    </div>
-                </div>
-            </header>
+            <AppHeader
+                title={connection.name}
+                subtitle="Área da conexão"
+                backAction={{ label: 'Dashboard', onClick: () => navigate('/dashboard') }}
+            />
 
             <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-12">
                 {errorMessage && <Alert severity="error" className="mb-6" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}

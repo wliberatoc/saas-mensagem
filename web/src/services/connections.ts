@@ -3,12 +3,14 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDocs,
     onSnapshot,
     query,
     serverTimestamp,
     Timestamp,
     updateDoc,
     where,
+    writeBatch,
     type FirestoreError,
     type Unsubscribe,
 } from 'firebase/firestore';
@@ -105,6 +107,26 @@ export function updateConnection(connectionId: string, connection: ConnectionInp
     });
 }
 
-export function deleteConnection(connectionId: string) {
-    return deleteDoc(doc(db, 'connections', connectionId));
+export async function deleteConnection(clientId: string, connectionId: string) {
+    const dependencyQueries = ['contacts', 'messages'].map((collectionName) => (
+        getDocs(query(
+            collection(db, collectionName),
+            where('clientId', '==', clientId),
+            where('connectionId', '==', connectionId),
+        ))
+    ));
+    const dependencySnapshots = await Promise.all(dependencyQueries);
+    const dependencyDocuments = dependencySnapshots.flatMap((snapshot) => snapshot.docs);
+
+    for (let offset = 0; offset < dependencyDocuments.length; offset += 500) {
+        const batch = writeBatch(db);
+
+        dependencyDocuments.slice(offset, offset + 500).forEach((document) => {
+            batch.delete(document.ref);
+        });
+
+        await batch.commit();
+    }
+
+    await deleteDoc(doc(db, 'connections', connectionId));
 }

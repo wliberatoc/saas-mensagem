@@ -86,7 +86,7 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
         setIsDeleting(true);
         setErrorMessage('');
         try {
-            await deleteConnection(connectionToDelete.id);
+            await deleteConnection(clientId, connectionToDelete.id);
             setConnectionToDelete(null);
         } catch {
             setErrorMessage('Não foi possível excluir a conexão.');

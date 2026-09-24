@@ -2,8 +2,10 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDocs,
     onSnapshot,
     query,
+    runTransaction,
     serverTimestamp,
     Timestamp,
     updateDoc,
@@ -96,4 +98,69 @@ export function updateScheduledMessage(messageId: string, message: MessageInput)
 
 export function deleteMessage(messageId: string) {
     return deleteDoc(doc(db, 'messages', messageId));
+}
+
+export type ScheduledMessagesProcessingResult = {
+    found: number;
+    processed: number;
+    failed: number;
+};
+
+export async function processDueMessages(clientId: string): Promise<ScheduledMessagesProcessingResult> {
+    const now = Timestamp.now();
+    const dueMessagesQuery = query(
+        collection(db, 'messages'),
+        where('clientId', '==', clientId),
+        where('status', '==', 'scheduled'),
+        where('scheduledAt', '<=', now),
+    );
+    const dueMessages = await getDocs(dueMessagesQuery);
+    let processed = 0;
+    let failed = 0;
+
+    for (let offset = 0; offset < dueMessages.docs.length; offset += 10) {
+        const results = await Promise.allSettled(
+            dueMessages.docs.slice(offset, offset + 10).map((messageDocument) => (
+                runTransaction(db, async (transaction) => {
+                    const currentMessage = await transaction.get(messageDocument.ref);
+
+                    if (!currentMessage.exists()) {
+                        return false;
+                    }
+
+                    const data = currentMessage.data();
+                    if (
+                        data.clientId !== clientId
+                        || data.status !== 'scheduled'
+                        || !(data.scheduledAt instanceof Timestamp)
+                        || data.scheduledAt.toMillis() > Date.now()
+                    ) {
+                        return false;
+                    }
+
+                    transaction.update(messageDocument.ref, {
+                        status: 'sent',
+                        sentAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                    });
+
+                    return true;
+                })
+            )),
+        );
+
+        results.forEach((result) => {
+            if (result.status === 'fulfilled') {
+                if (result.value) processed += 1;
+            } else {
+                failed += 1;
+            }
+        });
+    }
+
+    return {
+        found: dueMessages.size,
+        processed,
+        failed,
+    };
 }

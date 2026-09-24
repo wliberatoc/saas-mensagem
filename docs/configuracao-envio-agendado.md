@@ -1,97 +1,68 @@
-# Configuração do envio simulado de mensagens agendadas
+# Processamento de mensagens agendadas sem Blaze
 
-## Objetivo
+## Solução ativa
 
-O envio agendado deste projeto não envia mensagens para um serviço externo. Quando o horário de uma mensagem chega, o sistema deve apenas atualizar o documento no Firestore:
+O envio deste projeto é simulado: quando o horário agendado chega, nenhum serviço externo é chamado. O documento da mensagem é atualizado no Firestore com:
 
-- `status`: de `scheduled` para `sent`;
-- `sentAt`: data e hora do processamento;
-- `updatedAt`: data e hora do processamento.
+- `status: "sent"`;
+- `sentAt`: momento real do processamento;
+- `updatedAt`: momento real do processamento.
 
-A função responsável por isso é `sendScheduledMessages`, definida em `functions/src/index.ts`. Ela consulta mensagens vencidas a cada minuto e faz as atualizações em lotes de até 500 documentos.
+Como o projeto não utiliza o plano Blaze, o processamento é executado pelo aplicativo web enquanto existe um usuário autenticado.
 
-## Estado atual
+## Quando o processamento acontece
 
-- O código da função está implementado e compila com Node.js 22.
-- Foram adicionados logs com as quantidades de mensagens encontradas e atualizadas, sem conteúdo ou dados dos destinatários.
-- O índice composto de `messages.status` e `messages.scheduledAt` foi publicado e está no estado `READY`.
-- A Cloud Functions API foi habilitada durante a tentativa de deploy.
-- Nenhuma Function foi publicada e nenhum job do Cloud Scheduler foi criado.
-- A mensagem vencida continuará como `scheduled` até existir um processador ativo.
+O componente global `ScheduledMessagesProcessor` verifica todas as conexões do usuário:
 
-## Bloqueio encontrado
+- assim que a autenticação é restaurada, inclusive após atualizar a página;
+- a cada 60 segundos enquanto o aplicativo permanece aberto;
+- quando o usuário volta para uma aba que estava em segundo plano.
 
-O deploy exige que o projeto Firebase `saas-mensagens` esteja no plano Blaze e vinculado a uma conta de faturamento do Google Cloud com status `OPEN`.
+Se uma mensagem vencer enquanto o aplicativo estiver fechado, ela permanecerá como `scheduled` até o próximo acesso. Nesse acesso, será processada imediatamente e `sentAt` representará o momento do processamento, não o horário originalmente agendado.
 
-Na última tentativa, o Google Cloud retornou:
+## Segurança e concorrência
+
+A consulta considera apenas documentos que pertencem ao usuário autenticado, possuem `status == "scheduled"` e já alcançaram `scheduledAt`.
+
+Cada mensagem é atualizada em uma transação. Isso permite que duas abas ou dispositivos encontrem a mesma mensagem sem processá-la duas vezes. As regras do Firestore autorizam a transição apenas quando:
+
+- o documento pertence ao usuário autenticado;
+- o estado atual é `scheduled`;
+- `scheduledAt <= request.time`;
+- somente `status`, `sentAt` e `updatedAt` são alterados;
+- `sentAt` e `updatedAt` usam o horário do servidor.
+
+Conteúdo, destinatário, conexão, proprietário, data de criação e data agendada não podem ser alterados durante essa transição.
+
+## Índices
+
+O processamento no navegador utiliza o índice composto:
 
 ```text
-Billing account for project '522994311645' is not open.
+messages: clientId ASC, status ASC, scheduledAt ASC
 ```
 
-Por isso, as APIs `cloudbuild.googleapis.com`, `artifactregistry.googleapis.com` e `containerregistry.googleapis.com` não puderam ser ativadas. A conta não ter sido elegível ao teste sem custos não impede tecnicamente o uso do Blaze, mas será necessária uma conta de faturamento válida e cobranças poderão ocorrer.
+O índice anterior de `status + scheduledAt` continua declarado para permitir uma futura migração para processamento administrativo.
 
-## Como retomar quando o faturamento estiver resolvido
+## Limitações
 
-1. No Google Cloud Billing, criar ou reativar uma conta de faturamento com forma de pagamento válida.
-2. Confirmar que a conta aparece com status `OPEN` e vinculá-la ao projeto `saas-mensagens` (`522994311645`).
-3. No Firebase, confirmar que o projeto aparece no plano Blaze.
-4. É recomendado configurar alertas de orçamento antes do deploy.
-5. Na raiz do repositório, validar o build:
+- Não há processamento enquanto nenhum usuário estiver com o aplicativo aberto e autenticado.
+- Navegadores podem desacelerar temporizadores de abas em segundo plano; ao retornar à aba, o aplicativo faz uma nova verificação.
+- Falhas são registradas no console e tentadas novamente no próximo ciclo.
+- O horário de atualização pode ser posterior ao agendamento.
 
-```bash
-cd functions
-npm run build
-cd ..
-```
+Essas limitações são aceitas porque o envio atual é apenas uma simulação de mudança de status.
 
-6. Publicar novamente o índice, caso seja necessário ou para confirmar a configuração declarada no repositório:
+## Opção futura com backend
 
-```bash
-npx firebase-tools deploy --only firestore:indexes --project saas-mensagens
-```
+A função `sendScheduledMessages` permanece em `functions/src/index.ts`, mas não está publicada. Se futuramente houver uma conta de faturamento válida, ela poderá ser implantada com Cloud Functions e Cloud Scheduler para processar mensagens mesmo sem usuários conectados.
 
-7. Publicar somente a função agendada:
+Antes desse deploy será necessário vincular o projeto `saas-mensagens` a uma conta de faturamento do Google Cloud com status `OPEN` e ativar o plano Blaze.
 
-```bash
-npx firebase-tools deploy --only functions:sendScheduledMessages --project saas-mensagens
-```
+## Verificações recomendadas
 
-O Firebase CLI deverá ativar as APIs restantes e criar automaticamente a Function de segunda geração e o respectivo job do Cloud Scheduler na região `southamerica-east1`.
-
-## Verificação após o deploy
-
-Listar as funções publicadas:
-
-```bash
-npx firebase-tools functions:list --project saas-mensagens
-```
-
-Consultar os logs:
-
-```bash
-npx firebase-tools functions:log --only sendScheduledMessages --project saas-mensagens
-```
-
-Critérios para considerar a configuração concluída:
-
-- `sendScheduledMessages` aparece publicada em `southamerica-east1`;
-- o job correspondente aparece ativo no Cloud Scheduler;
-- os logs registram a varredura a cada minuto sem erros de índice ou permissão;
-- uma mensagem com `status == "scheduled"` e `scheduledAt <= agora` muda para `sent`;
-- `sentAt` e `updatedAt` são preenchidos;
-- mensagens com horário futuro e mensagens já enviadas não são modificadas.
-
-## Alternativa sem Blaze
-
-Como o envio é apenas simulado, existe uma alternativa que funciona no plano gratuito: processar mensagens vencidas no próprio aplicativo web.
-
-Nessa solução, ao abrir a tela de mensagens ou receber uma atualização do Firestore, o frontend identifica documentos vencidos e solicita a mudança para `sent`. Também seria necessário ajustar cuidadosamente as regras do Firestore para permitir apenas ao proprietário a transição de uma mensagem própria de `scheduled` para `sent`, sem permitir alterações indevidas em outros campos.
-
-Limitações dessa alternativa:
-
-- mensagens não são processadas enquanto ninguém estiver com o aplicativo aberto;
-- o horário registrado pode ser posterior ao agendamento;
-- o cliente passa a participar de uma transição que seria mais confiável no backend.
-
-Essa opção pode ser implementada provisoriamente se não for possível ativar uma conta de faturamento válida.
+1. Criar uma mensagem para alguns minutos no futuro e confirmar que permanece `scheduled` antes do horário.
+2. Manter o app aberto e confirmar a mudança para `sent` em até aproximadamente um minuto após o horário.
+3. Fechar o app, deixar outra mensagem vencer e confirmar o processamento ao entrar ou atualizar a página.
+4. Confirmar que mensagens de outras conexões do mesmo usuário também são processadas.
+5. Confirmar que mensagens imediatas e mensagens já enviadas não são alteradas novamente.

@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 
 import type { Message, MessageInput } from '../types/message';
+import type { Contact } from '../types/contact';
 import { db } from './firebase';
 
 export function subscribeToMessages(
@@ -98,6 +99,27 @@ export function updateScheduledMessage(messageId: string, message: MessageInput)
 
 export function deleteMessage(messageId: string) {
     return deleteDoc(doc(db, 'messages', messageId));
+}
+
+export async function synchronizeMessageRecipientNames(messages: Message[], contacts: Contact[]) {
+    const contactNames = new Map(contacts.map((contact) => [contact.id, contact.name]));
+    const messagesToUpdate = messages.filter((message) => {
+        const currentContactName = contactNames.get(message.recipient.contactId);
+        return currentContactName !== undefined && currentContactName !== message.recipient.name;
+    });
+
+    for (let offset = 0; offset < messagesToUpdate.length; offset += 500) {
+        const batch = writeBatch(db);
+
+        messagesToUpdate.slice(offset, offset + 500).forEach((message) => {
+            batch.update(doc(db, 'messages', message.id), {
+                'recipient.name': contactNames.get(message.recipient.contactId),
+                updatedAt: serverTimestamp(),
+            });
+        });
+
+        await batch.commit();
+    }
 }
 
 export type ScheduledMessagesProcessingResult = {

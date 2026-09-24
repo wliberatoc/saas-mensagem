@@ -70,9 +70,13 @@ service cloud.firestore {
         && request.resource.data.content.size() <= 4000
         && request.resource.data.recipient is map
         && request.resource.data.recipient.keys().hasAll(['contactId', 'phone'])
-        && request.resource.data.recipient.keys().hasOnly(['contactId', 'phone'])
+        && request.resource.data.recipient.keys().hasOnly(['contactId', 'name', 'phone'])
         && request.resource.data.recipient.contactId is string
         && request.resource.data.recipient.contactId.size() > 0
+        && (!request.resource.data.recipient.keys().hasAny(['name'])
+          || (request.resource.data.recipient.name is string
+            && request.resource.data.recipient.name.size() > 0
+            && request.resource.data.recipient.name.size() <= 120))
         && request.resource.data.recipient.phone is string
         && request.resource.data.recipient.phone.size() > 0
         && request.resource.data.recipient.phone.size() <= 30
@@ -126,6 +130,7 @@ service cloud.firestore {
       allow read, delete: if ownsExistingDocument();
       allow create: if ownsNewDocument()
         && hasValidMessageData()
+        && request.resource.data.recipient.name is string
         && connectionBelongsToUser(request.resource.data.connectionId)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
@@ -138,23 +143,33 @@ service cloud.firestore {
         );
       allow update: if ownsExistingDocument()
         && ownsNewDocument()
-        && resource.data.status == 'scheduled'
         && hasValidMessageData()
         && connectionBelongsToUser(request.resource.data.connectionId)
         && request.resource.data.clientId == resource.data.clientId
         && request.resource.data.connectionId == resource.data.connectionId
         && request.resource.data.createdAt == resource.data.createdAt
         && (
-          (request.resource.data.status == 'scheduled'
+          (resource.data.status == 'scheduled'
+            && request.resource.data.status == 'scheduled'
             && request.resource.data.sentAt == resource.data.sentAt
             && request.resource.data.updatedAt == request.time)
           ||
-          (request.resource.data.status == 'sent'
+          (resource.data.status == 'scheduled'
+            && request.resource.data.status == 'sent'
             && resource.data.scheduledAt <= request.time
             && request.resource.data.sentAt == request.time
             && request.resource.data.updatedAt == request.time
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'sentAt', 'updatedAt'
+            ]))
+          ||
+          (request.resource.data.status == resource.data.status
+            && request.resource.data.recipient.contactId == resource.data.recipient.contactId
+            && request.resource.data.recipient.phone == resource.data.recipient.phone
+            && request.resource.data.recipient.name == get(/databases/$(database)/documents/contacts/$(resource.data.recipient.contactId)).data.name
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'recipient', 'updatedAt'
             ]))
         );
     }

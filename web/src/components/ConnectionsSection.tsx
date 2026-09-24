@@ -164,7 +164,7 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
 
             <Dialog open={Boolean(connectionToDelete)} onClose={() => !isDeleting && setConnectionToDelete(null)} fullWidth maxWidth="xs">
                 <DialogTitle>Excluir conexão?</DialogTitle>
-                <DialogContent><Typography color="text.secondary">A conexão <strong>{connectionToDelete?.name}</strong> será excluída permanentemente se não possuir contatos ou mensagens.</Typography></DialogContent>
+                <DialogContent><Typography color="text.secondary">A conexão <strong>{connectionToDelete?.name}</strong> será excluída permanentemente, você perderá os dados associados como contatos e mensagens.</Typography></DialogContent>
                 <DialogActions sx={{ px: 3, pb: 3 }}>
                     <Button onClick={() => setConnectionToDelete(null)} disabled={isDeleting}>Cancelar</Button>
                     <Button color="error" variant="contained" onClick={handleDelete} disabled={isDeleting}>{isDeleting ? <CircularProgress size={21} color="inherit" /> : 'Excluir'}</Button>

@@ -8,7 +8,13 @@ import {
 } from '@mui/material';
 
 import { subscribeToContacts } from '../services/contacts';
-import { createMessages, deleteMessage, subscribeToMessages, updateScheduledMessage } from '../services/messages';
+import {
+    createMessages,
+    deleteMessage,
+    subscribeToMessages,
+    synchronizeMessageRecipientNames,
+    updateScheduledMessage,
+} from '../services/messages';
 import type { Contact } from '../types/contact';
 import type { Message, MessageStatus } from '../types/message';
 
@@ -100,6 +106,12 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
         filter === 'all' ? messages : messages.filter((message) => message.status === filter)
     ), [filter, messages]);
 
+    useEffect(() => {
+        void synchronizeMessageRecipientNames(messages, contacts).catch((error: unknown) => {
+            console.error('Não foi possível sincronizar os nomes dos contatos nas mensagens.', error);
+        });
+    }, [contacts, messages]);
+
     function openCreateForm() {
         setEditingMessage(null);
         setContent('');
@@ -136,7 +148,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
         const normalizedContent = content.trim();
         const recipients = contacts
             .filter((contact) => selectedContactIds.includes(contact.id))
-            .map((contact) => ({ contactId: contact.id, phone: contact.phone }));
+            .map((contact) => ({ contactId: contact.id, name: contact.name, phone: contact.phone }));
         const scheduledDate = isScheduled ? new Date(scheduledAt) : null;
 
         if (!normalizedContent) {
@@ -224,6 +236,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                     {filteredMessages.map((message) => {
                         const contact = contacts.find(({ id }) => id === message.recipient.contactId);
                         const hasOldPhone = Boolean(contact && contact.phone !== message.recipient.phone);
+                        const recipientName = contact?.name ?? message.recipient.name ?? 'Contato não encontrado';
 
                         return (
                         <Card key={message.id} variant="outlined" className="rounded-2xl border-slate-200">
@@ -236,8 +249,18 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
                                 </Stack>
                                 <Typography sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{message.content}</Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                                    Para: {contact?.name ?? 'Contato não encontrado'}
-                                    {hasOldPhone && (
+                                    Para:{' '}
+                                    {contact ? recipientName : (
+                                        <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
+                                            {recipientName}
+                                        </Box>
+                                    )}
+                                    {!contact && (
+                                        <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
+                                            {' '}{message.recipient.phone}
+                                        </Box>
+                                    )}
+                                    {contact && hasOldPhone && (
                                         <Box component="span" title="número antigo" sx={{ color: '#a0a0a1' }}>
                                             {' '}{message.recipient.phone}
                                         </Box>

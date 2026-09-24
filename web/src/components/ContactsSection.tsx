@@ -136,7 +136,7 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 
         try {
             if (editingContact) {
-                await updateContact(editingContact.id, {
+                await updateContact(clientId, editingContact.id, {
                     name: normalizedName,
                     phone: normalizedPhone,
                 });

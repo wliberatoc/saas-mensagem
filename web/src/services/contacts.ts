@@ -3,12 +3,14 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDocs,
     onSnapshot,
     query,
     serverTimestamp,
     Timestamp,
     updateDoc,
     where,
+    writeBatch,
     type FirestoreError,
     type Unsubscribe,
 } from 'firebase/firestore';
@@ -68,12 +70,37 @@ export function createContact(clientId: string, contact: ContactInput) {
     });
 }
 
-export function updateContact(contactId: string, contact: ContactUpdateInput) {
-    return updateDoc(doc(db, 'contacts', contactId), {
+export async function updateContact(clientId: string, contactId: string, contact: ContactUpdateInput) {
+    await updateDoc(doc(db, 'contacts', contactId), {
         name: contact.name,
         phone: contact.phone,
         updatedAt: serverTimestamp(),
     });
+
+    const messagesSnapshot = await getDocs(query(
+        collection(db, 'messages'),
+        where('clientId', '==', clientId),
+        where('recipient.contactId', '==', contactId),
+    ));
+
+    for (let offset = 0; offset < messagesSnapshot.docs.length; offset += 500) {
+        const batch = writeBatch(db);
+        let hasUpdates = false;
+
+        messagesSnapshot.docs.slice(offset, offset + 500).forEach((messageDocument) => {
+            const recipient = messageDocument.data().recipient as { contactId: string; name?: string; phone: string };
+
+            if (recipient.name !== contact.name) {
+                hasUpdates = true;
+                batch.update(messageDocument.ref, {
+                    'recipient.name': contact.name,
+                    updatedAt: serverTimestamp(),
+                });
+            }
+        });
+
+        if (hasUpdates) await batch.commit();
+    }
 }
 
 export function deleteContact(contactId: string) {

@@ -7,6 +7,8 @@ initializeApp();
 
 const db = getFirestore();
 
+// atenção essa função não é utilizada nesse projeto o motivo está no Readme.md do projeto
+//  mas ela serve como exemplo de como criar uma função agendada no firebase
 export const sendScheduledMessages = onSchedule(
     {
         schedule: 'every 1 minutes',

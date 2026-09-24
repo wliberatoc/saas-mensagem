@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Card, CardActions, CardContent, Checkbox,
     Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -35,6 +36,7 @@ function formatDate(date: Date | null) {
 }
 
 export function MessagesSection({ clientId, connectionId }: MessagesSectionProps) {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [messages, setMessages] = useState<Message[]>([]);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +44,6 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     const [isDeleting, setIsDeleting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [formErrorMessage, setFormErrorMessage] = useState('');
-    const [filter, setFilter] = useState<MessageFilter>('all');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingMessage, setEditingMessage] = useState<Message | null>(null);
     const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
@@ -50,6 +51,19 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
     const [isScheduled, setIsScheduled] = useState(false);
     const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt());
+    const statusParam = searchParams.get('status');
+    const filter: MessageFilter = statusParam === 'scheduled' || statusParam === 'sent'
+        ? statusParam
+        : 'all';
+
+    function handleFilterChange(value: MessageFilter) {
+        const updatedParams = new URLSearchParams(searchParams);
+
+        if (value === 'all') updatedParams.delete('status');
+        else updatedParams.set('status', value);
+
+        setSearchParams(updatedParams, { replace: true });
+    }
 
     useEffect(() => {
         let messagesLoaded = false;
@@ -193,7 +207,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
             {contacts.length === 0 && !isLoading && <Alert severity="info" className="mb-5">Cadastre ao menos um contato nesta conexão para criar mensagens.</Alert>}
             {errorMessage && <Alert severity="error" className="mb-5" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
 
-            <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, value: MessageFilter | null) => value && setFilter(value)} sx={{ mb: 3 }}>
+            <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, value: MessageFilter | null) => value && handleFilterChange(value)} sx={{ mb: 3 }}>
                 <ToggleButton value="all">Todas</ToggleButton>
                 <ToggleButton value="scheduled">Agendadas</ToggleButton>
                 <ToggleButton value="sent">Enviadas</ToggleButton>

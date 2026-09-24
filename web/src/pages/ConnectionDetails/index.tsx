@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Paper, Tab, Tabs } from '@mui/material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { AppHeader } from '../../components/AppHeader';
 import { ContactsSection } from '../../components/ContactsSection';
@@ -13,11 +13,21 @@ export function ConnectionDetailsPage() {
     const { user } = useAuth();
     const { connectionId } = useParams();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [connection, setConnection] = useState<Connection | null>(null);
     const [connections, setConnections] = useState<Connection[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
-    const [activeTab, setActiveTab] = useState(0);
+    const activeTab = searchParams.get('tab') === 'messages' ? 1 : 0;
+
+    function handleTabChange(value: number) {
+        const updatedParams = new URLSearchParams(searchParams);
+
+        if (value === 1) updatedParams.set('tab', 'messages');
+        else updatedParams.delete('tab');
+
+        setSearchParams(updatedParams, { replace: true });
+    }
 
     useEffect(() => {
         if (!user || !connectionId) {
@@ -72,7 +82,7 @@ export function ConnectionDetailsPage() {
             <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-12">
                 {errorMessage && <Alert severity="error" className="mb-6" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
                 <Paper elevation={0} className="mb-8 rounded-2xl border border-slate-200 px-2">
-                    <Tabs value={activeTab} onChange={(_, value: number) => setActiveTab(value)} aria-label="Áreas da conexão">
+                    <Tabs value={activeTab} onChange={(_, value: number) => handleTabChange(value)} aria-label="Áreas da conexão">
                         <Tab label="Contatos" />
                         <Tab label="Mensagens" />
                     </Tabs>

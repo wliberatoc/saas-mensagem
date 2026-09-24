@@ -3,8 +3,6 @@ import {
     collection,
     deleteDoc,
     doc,
-    getDocs,
-    limit,
     onSnapshot,
     query,
     serverTimestamp,
@@ -105,23 +103,6 @@ export function updateConnection(connectionId: string, connection: ConnectionInp
         name: connection.name,
         updatedAt: serverTimestamp(),
     });
-}
-
-export async function connectionHasDependencies(clientId: string, connectionId: string) {
-    const dependencyQueries = ['contacts', 'messages'].map((collectionName) => (
-        getDocs(query(
-            collection(db, collectionName),
-            where('clientId', '==', clientId),
-            where('connectionId', '==', connectionId),
-            limit(1),
-        ))
-    ));
-    const [contacts, messages] = await Promise.all(dependencyQueries);
-
-    return {
-        hasContacts: !contacts.empty,
-        hasMessages: !messages.empty,
-    };
 }
 
 export function deleteConnection(connectionId: string) {

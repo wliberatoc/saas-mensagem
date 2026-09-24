@@ -7,7 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import {
-    connectionHasDependencies, createConnection, deleteConnection,
+    createConnection, deleteConnection,
     subscribeToConnections, updateConnection,
 } from '../services/connections';
 import type { Connection } from '../types/connection';
@@ -86,14 +86,6 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
         setIsDeleting(true);
         setErrorMessage('');
         try {
-            const dependencies = await connectionHasDependencies(clientId, connectionToDelete.id);
-            if (dependencies.hasContacts || dependencies.hasMessages) {
-                const items = [dependencies.hasContacts ? 'contatos' : '', dependencies.hasMessages ? 'mensagens' : '']
-                    .filter(Boolean).join(' e ');
-                setErrorMessage(`A conexão não pode ser excluída porque possui ${items}. Exclua-os primeiro.`);
-                setConnectionToDelete(null);
-                return;
-            }
             await deleteConnection(connectionToDelete.id);
             setConnectionToDelete(null);
         } catch {

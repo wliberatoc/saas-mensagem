@@ -64,7 +64,7 @@ export function ConnectionDetailsPage() {
         <div className="min-h-screen bg-slate-100 text-slate-950">
             <header className="border-b border-slate-200 bg-white">
                 <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-4 sm:px-8">
-                    <Button color="inherit" onClick={() => navigate('/dashboard')} sx={{ textTransform: 'none' }}>← Conexões</Button>
+                    <Button color="inherit" onClick={() => navigate('/dashboard')} sx={{ textTransform: 'none' }}>← Dashboard</Button>
                     <div className="h-8 w-px bg-slate-200" />
                     <div className="min-w-0">
                         <Typography noWrap sx={{ fontWeight: 800 }}>{connection.name}</Typography>

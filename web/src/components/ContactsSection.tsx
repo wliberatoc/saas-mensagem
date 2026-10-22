@@ -1,18 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
 	Alert,
 	Box,
 	Button,
 	CircularProgress,
-	Dialog,
-	DialogActions,
-	DialogContent,
-	DialogTitle,
-	FormControl,
-	InputLabel,
-	MenuItem,
 	Paper,
-	Select,
 	Stack,
 	Table,
 	TableBody,
@@ -20,14 +12,14 @@ import {
 	TableContainer,
 	TableHead,
 	TableRow,
-	TextField,
 	Typography,
 } from '@mui/material';
 
-import { createContact, deleteContact, subscribeToContacts, updateContact } from '../services/contacts';
+import { subscribeToContacts } from '../services/contacts';
 import type { Contact } from '../types/contact';
 import type { Connection } from '../types/connection';
-import { formatPhone } from '../utils/phone';
+import { ContactFormDialog } from './ContactFormDialog';
+import { DeleteContactDialog } from './DeleteContactDialog';
 
 type ContactsSectionProps = {
 	clientId: string;
@@ -38,16 +30,10 @@ type ContactsSectionProps = {
 export function ContactsSection({ clientId, connectionId, connections }: ContactsSectionProps) {
 	const [contacts, setContacts] = useState<Contact[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
-	const [isSaving, setIsSaving] = useState(false);
-	const [isDeleting, setIsDeleting] = useState(false);
 	const [errorMessage, setErrorMessage] = useState('');
-	const [formErrorMessage, setFormErrorMessage] = useState('');
 	const [isFormOpen, setIsFormOpen] = useState(false);
 	const [editingContact, setEditingContact] = useState<Contact | null>(null);
 	const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
-	const [name, setName] = useState('');
-	const [phone, setPhone] = useState('');
-	const [selectedConnectionId, setSelectedConnectionId] = useState(connectionId);
 
 	useEffect(() => {
 		return subscribeToContacts(
@@ -66,83 +52,12 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 
 	function openCreateForm() {
 		setEditingContact(null);
-		setName('');
-		setPhone('');
-		setSelectedConnectionId(connectionId);
-		setFormErrorMessage('');
 		setIsFormOpen(true);
 	}
 
 	function openEditForm(contact: Contact) {
 		setEditingContact(contact);
-		setName(contact.name);
-		setPhone(formatPhone(contact.phone));
-		setSelectedConnectionId(contact.connectionId);
-		setFormErrorMessage('');
 		setIsFormOpen(true);
-	}
-
-	function closeForm() {
-		if (!isSaving) setIsFormOpen(false);
-	}
-
-	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-		setFormErrorMessage('');
-
-		const normalizedName = name.trim();
-		const normalizedPhone = phone.trim();
-
-		if (!normalizedName || !normalizedPhone) {
-			setFormErrorMessage('Preencha o nome e o telefone.');
-			return;
-		}
-
-		if (!editingContact && !selectedConnectionId) {
-			setFormErrorMessage('Selecione a conexão.');
-			return;
-		}
-
-		setIsSaving(true);
-
-		try {
-			if (editingContact) {
-				await updateContact(clientId, editingContact.id, {
-					name: normalizedName,
-					phone: normalizedPhone,
-				});
-			} else {
-				await createContact(clientId, {
-					connectionId: selectedConnectionId,
-					name: normalizedName,
-					phone: normalizedPhone,
-				});
-			}
-
-			setIsFormOpen(false);
-		} catch {
-			setFormErrorMessage(`Não foi possível ${editingContact ? 'atualizar' : 'criar'} o contato.`);
-		} finally {
-			setIsSaving(false);
-		}
-	}
-
-	async function handleDelete() {
-		if (!contactToDelete) {
-			return;
-		}
-
-		setErrorMessage('');
-		setIsDeleting(true);
-
-		try {
-			await deleteContact(contactToDelete.id);
-			setContactToDelete(null);
-		} catch {
-			setErrorMessage('Não foi possível excluir o contato.');
-		} finally {
-			setIsDeleting(false);
-		}
 	}
 
 	return (
@@ -232,106 +147,21 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 				</TableContainer>
 			)}
 
-			<Dialog open={isFormOpen} onClose={closeForm} fullWidth maxWidth="sm">
-				<Box component="form" onSubmit={handleSubmit}>
-					<DialogTitle>{editingContact ? 'Editar contato' : 'Novo contato'}</DialogTitle>
-					<DialogContent>
-						<Stack spacing={3} sx={{ pt: 1 }}>
-							{formErrorMessage && (
-								<Alert severity="error" onClose={() => setFormErrorMessage('')}>
-									{formErrorMessage}
-								</Alert>
-							)}
-							{!editingContact && (
-								<FormControl fullWidth required>
-									<InputLabel id="contact-connection-label">Conexão</InputLabel>
-									<Select
-										labelId="contact-connection-label"
-										label="Conexão"
-										value={selectedConnectionId}
-										onChange={event => setSelectedConnectionId(event.target.value)}
-									>
-										{connections.map(connection => (
-											<MenuItem key={connection.id} value={connection.id}>
-												{connection.name}
-											</MenuItem>
-										))}
-									</Select>
-								</FormControl>
-							)}
-							<TextField
-								label="Nome"
-								value={name}
-								onChange={event => setName(event.target.value)}
-								autoFocus
-								required
-								fullWidth
-								slotProps={{ htmlInput: { maxLength: 120 } }}
-							/>
-							<TextField
-								label="Telefone"
-								type="tel"
-								value={phone}
-								onChange={event => setPhone(formatPhone(event.target.value))}
-								placeholder="(11) 99999-9999"
-								required
-								fullWidth
-								slotProps={{
-									htmlInput: {
-										inputMode: 'numeric',
-										maxLength: 15,
-									},
-								}}
-							/>
-						</Stack>
-					</DialogContent>
-					<DialogActions sx={{ px: 3, pb: 3 }}>
-						<Button onClick={closeForm} disabled={isSaving} sx={{ textTransform: 'none' }}>
-							Cancelar
-						</Button>
-						<Button
-							type="submit"
-							variant="contained"
-							disabled={isSaving}
-							sx={{ minWidth: 100, textTransform: 'none', fontWeight: 700 }}
-						>
-							{isSaving ? <CircularProgress size={21} color="inherit" /> : 'Salvar'}
-						</Button>
-					</DialogActions>
-				</Box>
-			</Dialog>
+			{isFormOpen && (
+				<ContactFormDialog
+					clientId={clientId}
+					connectionId={connectionId}
+					connections={connections}
+					contact={editingContact}
+					onClose={() => setIsFormOpen(false)}
+				/>
+			)}
 
-			<Dialog
-				open={Boolean(contactToDelete)}
-				onClose={() => !isDeleting && setContactToDelete(null)}
-				fullWidth
-				maxWidth="xs"
-			>
-				<DialogTitle>Excluir contato?</DialogTitle>
-				<DialogContent>
-					<Typography color="text.secondary">
-						O contato <strong>{contactToDelete?.name}</strong> será excluído permanentemente.
-					</Typography>
-				</DialogContent>
-				<DialogActions sx={{ px: 3, pb: 3 }}>
-					<Button
-						onClick={() => setContactToDelete(null)}
-						disabled={isDeleting}
-						sx={{ textTransform: 'none' }}
-					>
-						Cancelar
-					</Button>
-					<Button
-						color="error"
-						variant="contained"
-						onClick={handleDelete}
-						disabled={isDeleting}
-						sx={{ minWidth: 100, textTransform: 'none', fontWeight: 700 }}
-					>
-						{isDeleting ? <CircularProgress size={21} color="inherit" /> : 'Excluir'}
-					</Button>
-				</DialogActions>
-			</Dialog>
+			<DeleteContactDialog
+				contact={contactToDelete}
+				onClose={() => setContactToDelete(null)}
+				onError={setErrorMessage}
+			/>
 		</section>
 	);
 }

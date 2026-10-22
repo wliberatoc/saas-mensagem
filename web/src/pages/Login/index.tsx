@@ -67,7 +67,7 @@ export function LoginPage() {
 
 	return (
 		<main className="grid min-h-screen bg-slate-950 lg:grid-cols-2">
-			<section className="relative hidden overflow-hidden bg-gradient-to-br from-indigo-700 via-violet-700 to-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+			<section className="relative hidden overflow-hidden bg-linear-to-br  from-indigo-700 via-violet-700 to-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
 				<div className="absolute -left-24 top-32 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
 				<div className="absolute -right-20 bottom-16 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl" />
 

@@ -1,4 +1,8 @@
 import { useState, type FormEvent } from 'react';
+import { FirebaseError } from 'firebase/app';
+import { Link as RouterLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import { login as loginWithEmailAndPassword } from '../../services/auth';
 import {
 	Alert,
 	Box,
@@ -10,11 +14,6 @@ import {
 	TextField,
 	Typography,
 } from '@mui/material';
-import { FirebaseError } from 'firebase/app';
-import { Link as RouterLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
-
-import { useAuth } from '../../hooks/useAuth';
-import { login as loginWithEmailAndPassword } from '../../services/auth';
 
 type LoginLocationState = {
 	from?: string;

@@ -83,9 +83,7 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 	}
 
 	function closeForm() {
-		if (!isSaving) {
-			setIsFormOpen(false);
-		}
+		if (!isSaving) setIsFormOpen(false);
 	}
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {

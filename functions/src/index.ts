@@ -49,7 +49,7 @@ export const sendScheduledMessages = onSchedule(
                 processed += scheduledMessages.size;
             } catch (error) {
                 failed += scheduledMessages.size;
-                logger.error('Failed to process a scheduled messages page.', {
+                logger.error('Falha ao processar uma página de mensagens agendadas.', {
                     error,
                     failed,
                     found,
@@ -59,7 +59,7 @@ export const sendScheduledMessages = onSchedule(
             }
         }
 
-        logger.info('Finished processing scheduled messages.', {
+        logger.info('Processamento de mensagens agendadas concluído.', {
             failed,
             found,
             processed,

@@ -1,6 +1,7 @@
 import type { Timestamp } from 'firebase/firestore';
 
 export type MessageStatus = 'scheduled' | 'sent';
+export type MessageFilter = 'all' | MessageStatus;
 
 export type MessageRecipient = {
     contactId: string;

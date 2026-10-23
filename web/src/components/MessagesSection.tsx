@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Timestamp } from 'firebase/firestore';
 import { useSearchParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Card, CardActions, CardContent, Checkbox,
@@ -8,15 +9,19 @@ import {
 } from '@mui/material';
 
 import type { AsyncState } from '../hooks/useObservableState';
+import { useObservableState } from '../hooks/useObservableState';
 import {
     createMessages,
     deleteMessage,
-    subscribeToMessages,
+    loadMoreMessages,
+    observeMessages,
     synchronizeMessageRecipientNames,
     updateScheduledMessage,
+    type MessageCursor,
+    type MessagePage,
 } from '../services/messages';
 import type { Contact } from '../types/contact';
-import type { Message, MessageStatus } from '../types/message';
+import type { Message, MessageFilter } from '../types/message';
 
 type MessagesSectionProps = {
     clientId: string;
@@ -24,7 +29,16 @@ type MessagesSectionProps = {
     contactsState: AsyncState<Contact[]>;
 };
 
-type MessageFilter = 'all' | MessageStatus;
+type MessagesSectionContentProps = MessagesSectionProps & {
+    filter: MessageFilter;
+    onFilterChange: (filter: MessageFilter) => void;
+};
+
+const EMPTY_MESSAGE_PAGE: MessagePage = {
+    items: [],
+    cursor: null,
+    hasMore: false,
+};
 
 function defaultScheduledAt() {
     const date = new Date(Date.now() + 5 * 60 * 1000);
@@ -42,27 +56,22 @@ function formatDate(date: Date | null) {
     return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
+function mergeMessages(liveMessages: Message[], historicalMessages: Message[]) {
+    const seen = new Set<string>();
+
+    return [...liveMessages, ...historicalMessages].filter((message) => {
+        if (seen.has(message.id)) return false;
+        seen.add(message.id);
+        return true;
+    });
+}
+
 export function MessagesSection({ clientId, connectionId, contactsState }: MessagesSectionProps) {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [messages, setMessages] = useState<Message[]>([]);
-    const contacts = contactsState.data;
-    const [areMessagesLoading, setAreMessagesLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [errorMessage, setErrorMessage] = useState('');
-    const [formErrorMessage, setFormErrorMessage] = useState('');
-    const [isFormOpen, setIsFormOpen] = useState(false);
-    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-    const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
-    const [content, setContent] = useState('');
-    const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
-    const [isScheduled, setIsScheduled] = useState(false);
-    const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt());
     const statusParam = searchParams.get('status');
     const filter: MessageFilter = statusParam === 'scheduled' || statusParam === 'sent'
         ? statusParam
         : 'all';
-    const isLoading = areMessagesLoading || contactsState.status === 'loading';
 
     function handleFilterChange(value: MessageFilter) {
         const updatedParams = new URLSearchParams(searchParams);
@@ -73,26 +82,54 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
         setSearchParams(updatedParams, { replace: true });
     }
 
-    useEffect(() => {
-        const unsubscribeMessages = subscribeToMessages(
-            clientId,
-            connectionId,
-            (updatedMessages) => {
-                setMessages(updatedMessages);
-                setAreMessagesLoading(false);
-            },
-            () => {
-                setErrorMessage('Não foi possível carregar as mensagens.');
-                setAreMessagesLoading(false);
-            },
-        );
+    return (
+        <MessagesSectionContent
+            key={`${clientId}:${connectionId}:${filter}`}
+            clientId={clientId}
+            connectionId={connectionId}
+            contactsState={contactsState}
+            filter={filter}
+            onFilterChange={handleFilterChange}
+        />
+    );
+}
 
-        return unsubscribeMessages;
-    }, [clientId, connectionId]);
-
-    const filteredMessages = useMemo(() => (
-        filter === 'all' ? messages : messages.filter((message) => message.status === filter)
-    ), [filter, messages]);
+function MessagesSectionContent({
+    clientId,
+    connectionId,
+    contactsState,
+    filter,
+    onFilterChange,
+}: MessagesSectionContentProps) {
+    const contacts = contactsState.data;
+    const firstPageSource = useMemo(
+        () => observeMessages(clientId, connectionId, filter),
+        [clientId, connectionId, filter],
+    );
+    const firstPageState = useObservableState(firstPageSource, EMPTY_MESSAGE_PAGE);
+    const [historicalMessages, setHistoricalMessages] = useState<Message[]>([]);
+    const [historyCursor, setHistoryCursor] = useState<MessageCursor | null>(null);
+    const [historyHasMore, setHistoryHasMore] = useState(false);
+    const [historyStarted, setHistoryStarted] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [loadMoreError, setLoadMoreError] = useState('');
+    const [formErrorMessage, setFormErrorMessage] = useState('');
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+    const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
+    const [content, setContent] = useState('');
+    const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+    const [isScheduled, setIsScheduled] = useState(false);
+    const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt());
+    const messages = useMemo(
+        () => mergeMessages(firstPageState.data.items, historicalMessages),
+        [firstPageState.data.items, historicalMessages],
+    );
+    const isLoading = firstPageState.status === 'loading' || contactsState.status === 'loading';
+    const canLoadMore = historyStarted ? historyHasMore : firstPageState.data.hasMore;
 
     useEffect(() => {
         void synchronizeMessageRecipientNames(messages, contacts).catch((error: unknown) => {
@@ -131,6 +168,31 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
             : [...current, contactId]);
     }
 
+    async function handleLoadMore() {
+        const cursor = historyStarted ? historyCursor : firstPageState.data.cursor;
+        if (!cursor || isLoadingMore) return;
+
+        setIsLoadingMore(true);
+        setLoadMoreError('');
+
+        try {
+            const page = await loadMoreMessages(clientId, connectionId, filter, cursor);
+            const boundaryMessage = historyStarted ? null : firstPageState.data.items.at(-1) ?? null;
+
+            setHistoricalMessages((current) => mergeMessages(
+                current,
+                [...(boundaryMessage ? [boundaryMessage] : []), ...page.items],
+            ));
+            setHistoryCursor(page.cursor);
+            setHistoryHasMore(page.hasMore);
+            setHistoryStarted(true);
+        } catch {
+            setLoadMoreError('Não foi possível carregar mais mensagens.');
+        } finally {
+            setIsLoadingMore(false);
+        }
+    }
+
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const normalizedContent = content.trim();
@@ -159,12 +221,22 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
         setIsSaving(true);
         setFormErrorMessage('');
         try {
-            if (editingMessage) {
+            if (editingMessage && scheduledDate) {
                 await updateScheduledMessage(editingMessage.id, {
                     content: normalizedContent,
                     recipient: recipients[0],
                     scheduledAt: scheduledDate,
                 });
+                setHistoricalMessages((current) => current.map((message) => (
+                    message.id === editingMessage.id
+                        ? {
+                            ...message,
+                            content: normalizedContent,
+                            recipient: recipients[0],
+                            scheduledAt: Timestamp.fromDate(scheduledDate),
+                        }
+                        : message
+                )));
             } else {
                 await createMessages(clientId, connectionId, recipients.map((recipient) => ({
                     content: normalizedContent,
@@ -186,6 +258,9 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
         setErrorMessage('');
         try {
             await deleteMessage(messageToDelete.id);
+            setHistoricalMessages((current) => (
+                current.filter((message) => message.id !== messageToDelete.id)
+            ));
             setMessageToDelete(null);
         } catch {
             setErrorMessage('Não foi possível excluir a mensagem.');
@@ -205,14 +280,12 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
             </div>
 
             {contacts.length === 0 && !isLoading && <Alert severity="info" className="mb-5">Cadastre ao menos um contato nesta conexão para criar mensagens.</Alert>}
-            {contactsState.status === 'error' && (
-                <Alert severity="error" className="mb-5">
-                    Não foi possível carregar os contatos disponíveis.
-                </Alert>
-            )}
+            {contactsState.status === 'error' && <Alert severity="error" className="mb-5">Não foi possível carregar os contatos disponíveis.</Alert>}
+            {firstPageState.status === 'error' && <Alert severity="error" className="mb-5">Não foi possível carregar as mensagens.</Alert>}
             {errorMessage && <Alert severity="error" className="mb-5" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
+            {loadMoreError && <Alert severity="error" className="mb-5" onClose={() => setLoadMoreError('')}>{loadMoreError}</Alert>}
 
-            <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, value: MessageFilter | null) => value && handleFilterChange(value)} sx={{ mb: 3 }}>
+            <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, value: MessageFilter | null) => value && onFilterChange(value)} sx={{ mb: 3 }}>
                 <ToggleButton value="all">Todas</ToggleButton>
                 <ToggleButton value="scheduled">Agendadas</ToggleButton>
                 <ToggleButton value="sent">Enviadas</ToggleButton>
@@ -220,54 +293,66 @@ export function MessagesSection({ clientId, connectionId, contactsState }: Messa
 
             {isLoading ? (
                 <Box className="grid min-h-48 place-items-center"><CircularProgress /></Box>
-            ) : filteredMessages.length === 0 ? (
+            ) : firstPageState.status === 'error' ? null : messages.length === 0 ? (
                 <Paper elevation={0} className="grid min-h-48 place-items-center rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
                     <Typography color="text.secondary">Nenhuma mensagem encontrada neste filtro.</Typography>
                 </Paper>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {filteredMessages.map((message) => {
-                        const contact = contacts.find(({ id }) => id === message.recipient.contactId);
-                        const hasOldPhone = Boolean(contact && contact.phone !== message.recipient.phone);
-                        const recipientName = contact?.name ?? message.recipient.name ?? 'Contato não encontrado';
+                <>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {messages.map((message) => {
+                            const contact = contacts.find(({ id }) => id === message.recipient.contactId);
+                            const hasOldPhone = Boolean(contact && contact.phone !== message.recipient.phone);
+                            const recipientName = contact?.name ?? message.recipient.name ?? 'Contato não encontrado';
 
-                        return (
-                        <Card key={message.id} variant="outlined" className="rounded-2xl border-slate-200">
-                            <CardContent>
-                                <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Chip size="small" color={message.status === 'sent' ? 'success' : 'warning'} label={message.status === 'sent' ? 'Enviada' : 'Agendada'} />
-                                    <Typography variant="caption" color="text.secondary">
-                                        {formatDate((message.sentAt ?? message.scheduledAt ?? message.createdAt)?.toDate() ?? null)}
-                                    </Typography>
-                                </Stack>
-                                <Typography sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{message.content}</Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                                    Para:{' '}
-                                    {contact ? recipientName : (
-                                        <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
-                                            {recipientName}
-                                        </Box>
-                                    )}
-                                    {!contact && (
-                                        <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
-                                            {' '}{message.recipient.phone}
-                                        </Box>
-                                    )}
-                                    {contact && hasOldPhone && (
-                                        <Box component="span" title="número antigo" sx={{ color: '#a0a0a1' }}>
-                                            {' '}{message.recipient.phone}
-                                        </Box>
-                                    )}
-                                </Typography>
-                            </CardContent>
-                            <CardActions>
-                                {message.status === 'scheduled' && <Button onClick={() => openEditForm(message)}>Editar</Button>}
-                                <Button color="error" onClick={() => setMessageToDelete(message)}>Excluir</Button>
-                            </CardActions>
-                        </Card>
-                        );
-                    })}
-                </div>
+                            return (
+                                <Card key={message.id} variant="outlined" className="rounded-2xl border-slate-200">
+                                    <CardContent>
+                                        <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Chip size="small" color={message.status === 'sent' ? 'success' : 'warning'} label={message.status === 'sent' ? 'Enviada' : 'Agendada'} />
+                                            <Typography variant="caption" color="text.secondary">
+                                                {formatDate((message.sentAt ?? message.scheduledAt ?? message.createdAt)?.toDate() ?? null)}
+                                            </Typography>
+                                        </Stack>
+                                        <Typography sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{message.content}</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                                            Para:{' '}
+                                            {contact ? recipientName : (
+                                                <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
+                                                    {recipientName}
+                                                </Box>
+                                            )}
+                                            {!contact && (
+                                                <Box component="span" title="contato excluído" sx={{ color: '#a0a0a1' }}>
+                                                    {' '}{message.recipient.phone}
+                                                </Box>
+                                            )}
+                                            {contact && hasOldPhone && (
+                                                <Box component="span" title="número antigo" sx={{ color: '#a0a0a1' }}>
+                                                    {' '}{message.recipient.phone}
+                                                </Box>
+                                            )}
+                                        </Typography>
+                                    </CardContent>
+                                    <CardActions>
+                                        {message.status === 'scheduled' && <Button onClick={() => openEditForm(message)}>Editar</Button>}
+                                        <Button color="error" onClick={() => setMessageToDelete(message)}>Excluir</Button>
+                                    </CardActions>
+                                </Card>
+                            );
+                        })}
+                    </div>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                        {canLoadMore ? (
+                            <Button variant="outlined" onClick={handleLoadMore} disabled={isLoadingMore}>
+                                {isLoadingMore ? <CircularProgress size={21} /> : 'Carregar mais'}
+                            </Button>
+                        ) : historyStarted ? (
+                            <Typography variant="body2" color="text.secondary">Fim do histórico.</Typography>
+                        ) : null}
+                    </Box>
+                </>
             )}
 
             <Dialog open={isFormOpen} onClose={() => !isSaving && setIsFormOpen(false)} fullWidth maxWidth="sm">

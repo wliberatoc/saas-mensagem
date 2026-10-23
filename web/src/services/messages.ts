@@ -3,60 +3,115 @@ import {
     deleteDoc,
     doc,
     getDocs,
+    limit,
     onSnapshot,
+    orderBy,
     query,
     runTransaction,
     serverTimestamp,
+    startAfter,
     Timestamp,
     updateDoc,
     where,
     writeBatch,
-    type FirestoreError,
-    type Unsubscribe,
+    type DocumentData,
+    type QueryConstraint,
+    type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import type { Observable } from 'rxjs';
 
-import type { Message, MessageInput } from '../types/message';
+import type { Message, MessageFilter, MessageInput } from '../types/message';
 import type { Contact } from '../types/contact';
 import { db } from './firebase';
+import { fromFirestoreSubscription } from './firestore-observable';
 
-export function subscribeToMessages(
+export const MESSAGE_PAGE_SIZE = 50;
+
+export type MessageCursor = QueryDocumentSnapshot<DocumentData>;
+
+export type MessagePage = {
+    items: Message[];
+    cursor: MessageCursor | null;
+    hasMore: boolean;
+};
+
+function mapMessageDocument(messageDocument: QueryDocumentSnapshot<DocumentData>): Message {
+    const data = messageDocument.data();
+
+    return {
+        id: messageDocument.id,
+        clientId: data.clientId as string,
+        connectionId: data.connectionId as string,
+        content: data.content as string,
+        recipient: data.recipient as Message['recipient'],
+        status: data.status as Message['status'],
+        scheduledAt: data.scheduledAt instanceof Timestamp ? data.scheduledAt : null,
+        sentAt: data.sentAt instanceof Timestamp ? data.sentAt : null,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : null,
+    };
+}
+
+function toMessagePage(documents: QueryDocumentSnapshot<DocumentData>[]): MessagePage {
+    return {
+        items: documents.map(mapMessageDocument),
+        cursor: documents.at(-1) ?? null,
+        hasMore: documents.length === MESSAGE_PAGE_SIZE,
+    };
+}
+
+function createMessagesQuery(
     clientId: string,
     connectionId: string,
-    onMessagesChange: (messages: Message[]) => void,
-    onError: (error: FirestoreError) => void,
-): Unsubscribe {
-    const messagesQuery = query(
-        collection(db, 'messages'),
+    filter: MessageFilter,
+    cursor?: MessageCursor,
+) {
+    const constraints: QueryConstraint[] = [
         where('clientId', '==', clientId),
         where('connectionId', '==', connectionId),
+    ];
+
+    if (filter === 'sent') {
+        constraints.push(where('status', '==', 'sent'), orderBy('sentAt', 'desc'));
+    } else if (filter === 'scheduled') {
+        constraints.push(where('status', '==', 'scheduled'), orderBy('scheduledAt', 'asc'));
+    } else {
+        constraints.push(orderBy('createdAt', 'desc'));
+    }
+
+    if (cursor) constraints.push(startAfter(cursor));
+    constraints.push(limit(MESSAGE_PAGE_SIZE));
+
+    return query(
+        collection(db, 'messages'),
+        ...constraints,
     );
+}
 
-    return onSnapshot(
-        messagesQuery,
-        (snapshot) => {
-            const messages = snapshot.docs.map((messageDocument) => {
-                const data = messageDocument.data();
+export function observeMessages(
+    clientId: string,
+    connectionId: string,
+    filter: MessageFilter,
+): Observable<MessagePage> {
+    const messagesQuery = createMessagesQuery(clientId, connectionId, filter);
 
-                return {
-                    id: messageDocument.id,
-                    clientId: data.clientId as string,
-                    connectionId: data.connectionId as string,
-                    content: data.content as string,
-                    recipient: data.recipient as Message['recipient'],
-                    status: data.status as Message['status'],
-                    scheduledAt: data.scheduledAt instanceof Timestamp ? data.scheduledAt : null,
-                    sentAt: data.sentAt instanceof Timestamp ? data.sentAt : null,
-                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
-                    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : null,
-                } satisfies Message;
-            }).sort((first, second) => (
-                (second.createdAt?.toMillis() ?? 0) - (first.createdAt?.toMillis() ?? 0)
-            ));
+    return fromFirestoreSubscription<MessagePage>((onNext, onError) => (
+        onSnapshot(
+            messagesQuery,
+            (snapshot) => onNext(toMessagePage(snapshot.docs)),
+            onError,
+        )
+    ));
+}
 
-            onMessagesChange(messages);
-        },
-        onError,
-    );
+export async function loadMoreMessages(
+    clientId: string,
+    connectionId: string,
+    filter: MessageFilter,
+    cursor: MessageCursor,
+): Promise<MessagePage> {
+    const snapshot = await getDocs(createMessagesQuery(clientId, connectionId, filter, cursor));
+    return toMessagePage(snapshot.docs);
 }
 
 export async function createMessages(clientId: string, connectionId: string, messages: MessageInput[]) {

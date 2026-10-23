@@ -75,17 +75,23 @@ export function createContact(clientId: string, contact: ContactInput) {
     });
 }
 
-export async function updateContact(clientId: string, contactId: string, contact: ContactUpdateInput) {
-    await updateDoc(doc(db, 'contacts', contactId), {
+export async function updateContact(
+    clientId: string,
+    currentContact: Pick<Contact, 'id' | 'name'>,
+    contact: ContactUpdateInput,
+) {
+    await updateDoc(doc(db, 'contacts', currentContact.id), {
         name: contact.name,
         phone: contact.phone,
         updatedAt: serverTimestamp(),
     });
 
+    if (currentContact.name === contact.name) return;
+
     const messagesSnapshot = await getDocs(query(
         collection(db, 'messages'),
         where('clientId', '==', clientId),
-        where('recipient.contactId', '==', contactId),
+        where('recipient.contactId', '==', currentContact.id),
     ));
 
     for (let offset = 0; offset < messagesSnapshot.docs.length; offset += 500) {

@@ -21,9 +21,8 @@ import {
 import type { Observable } from 'rxjs';
 
 import type { Message, MessageFilter, MessageInput } from '../types/message';
-import type { Contact } from '../types/contact';
 import { db } from './firebase';
-import { fromFirestoreSubscription } from './firestore-observable';
+import { fromFirestoreSubscription, shareLatest } from './firestore-observable';
 
 export const MESSAGE_PAGE_SIZE = 50;
 
@@ -34,6 +33,8 @@ export type MessagePage = {
     cursor: MessageCursor | null;
     hasMore: boolean;
 };
+
+const nextScheduledMessageByClient = new Map<string, Observable<Message | null>>();
 
 function mapMessageDocument(messageDocument: QueryDocumentSnapshot<DocumentData>): Message {
     const data = messageDocument.data();
@@ -114,6 +115,31 @@ export async function loadMoreMessages(
     return toMessagePage(snapshot.docs);
 }
 
+export function observeNextScheduledMessage(clientId: string): Observable<Message | null> {
+    const cached = nextScheduledMessageByClient.get(clientId);
+    if (cached) return cached;
+
+    const nextScheduledMessageQuery = query(
+        collection(db, 'messages'),
+        where('clientId', '==', clientId),
+        where('status', '==', 'scheduled'),
+        orderBy('scheduledAt', 'asc'),
+        limit(1),
+    );
+    const nextScheduledMessage = fromFirestoreSubscription<Message | null>((onNext, onError) => (
+        onSnapshot(
+            nextScheduledMessageQuery,
+            (snapshot) => onNext(
+                snapshot.docs[0] ? mapMessageDocument(snapshot.docs[0]) : null,
+            ),
+            onError,
+        )
+    )).pipe(shareLatest());
+
+    nextScheduledMessageByClient.set(clientId, nextScheduledMessage);
+    return nextScheduledMessage;
+}
+
 export async function createMessages(clientId: string, connectionId: string, messages: MessageInput[]) {
     for (let offset = 0; offset < messages.length; offset += 500) {
         const batch = writeBatch(db);
@@ -156,88 +182,31 @@ export function deleteMessage(messageId: string) {
     return deleteDoc(doc(db, 'messages', messageId));
 }
 
-export async function synchronizeMessageRecipientNames(messages: Message[], contacts: Contact[]) {
-    const contactNames = new Map(contacts.map((contact) => [contact.id, contact.name]));
-    const messagesToUpdate = messages.filter((message) => {
-        const currentContactName = contactNames.get(message.recipient.contactId);
-        return currentContactName !== undefined && currentContactName !== message.recipient.name;
+export function processScheduledMessage(clientId: string, messageId: string): Promise<boolean> {
+    return runTransaction(db, async (transaction) => {
+        const messageReference = doc(db, 'messages', messageId);
+        const currentMessage = await transaction.get(messageReference);
+
+        if (!currentMessage.exists()) {
+            return false;
+        }
+
+        const data = currentMessage.data();
+        if (
+            data.clientId !== clientId
+            || data.status !== 'scheduled'
+            || !(data.scheduledAt instanceof Timestamp)
+            || data.scheduledAt.toMillis() > Date.now()
+        ) {
+            return false;
+        }
+
+        transaction.update(messageReference, {
+            status: 'sent',
+            sentAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+
+        return true;
     });
-
-    for (let offset = 0; offset < messagesToUpdate.length; offset += 500) {
-        const batch = writeBatch(db);
-
-        messagesToUpdate.slice(offset, offset + 500).forEach((message) => {
-            batch.update(doc(db, 'messages', message.id), {
-                'recipient.name': contactNames.get(message.recipient.contactId),
-                updatedAt: serverTimestamp(),
-            });
-        });
-
-        await batch.commit();
-    }
-}
-
-export type ScheduledMessagesProcessingResult = {
-    found: number;
-    processed: number;
-    failed: number;
-};
-
-export async function processDueMessages(clientId: string): Promise<ScheduledMessagesProcessingResult> {
-    const now = Timestamp.now();
-    const dueMessagesQuery = query(
-        collection(db, 'messages'),
-        where('clientId', '==', clientId),
-        where('status', '==', 'scheduled'),
-        where('scheduledAt', '<=', now),
-    );
-    const dueMessages = await getDocs(dueMessagesQuery);
-    let processed = 0;
-    let failed = 0;
-
-    for (let offset = 0; offset < dueMessages.docs.length; offset += 10) {
-        const results = await Promise.allSettled(
-            dueMessages.docs.slice(offset, offset + 10).map((messageDocument) => (
-                runTransaction(db, async (transaction) => {
-                    const currentMessage = await transaction.get(messageDocument.ref);
-
-                    if (!currentMessage.exists()) {
-                        return false;
-                    }
-
-                    const data = currentMessage.data();
-                    if (
-                        data.clientId !== clientId
-                        || data.status !== 'scheduled'
-                        || !(data.scheduledAt instanceof Timestamp)
-                        || data.scheduledAt.toMillis() > Date.now()
-                    ) {
-                        return false;
-                    }
-
-                    transaction.update(messageDocument.ref, {
-                        status: 'sent',
-                        sentAt: serverTimestamp(),
-                        updatedAt: serverTimestamp(),
-                    });
-
-                    return true;
-                })
-            )),
-        );
-
-        results.forEach((result) => {
-            if (result.status === 'fulfilled') {
-                if (result.value) processed += 1;
-            } else {
-                failed += 1;
-            }
-        });
-    }
-
-    return {
-        found: dueMessages.size,
-        processed,
-        failed,
-    };
 }

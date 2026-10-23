@@ -55,7 +55,9 @@ vi.mock('./firebase', () => ({ db: {} }));
 import {
     loadMoreMessages,
     MESSAGE_PAGE_SIZE,
+    observeNextScheduledMessage,
     observeMessages,
+    processScheduledMessage,
     type MessageCursor,
     type MessagePage,
 } from './messages';
@@ -112,6 +114,69 @@ describe('message queries', () => {
         }
 
         subscription.unsubscribe();
+    });
+
+    it('observes only the next scheduled message and shares the listener', () => {
+        const firstSubscription = observeNextScheduledMessage('scheduler-client').subscribe();
+        const secondSubscription = observeNextScheduledMessage('scheduler-client').subscribe();
+
+        expect(firestoreMocks.where).toHaveBeenCalledWith('clientId', '==', 'scheduler-client');
+        expect(firestoreMocks.where).toHaveBeenCalledWith('status', '==', 'scheduled');
+        expect(firestoreMocks.orderBy).toHaveBeenCalledWith('scheduledAt', 'asc');
+        expect(firestoreMocks.limit).toHaveBeenCalledWith(1);
+        expect(firestoreMocks.onSnapshot).toHaveBeenCalledOnce();
+
+        firstSubscription.unsubscribe();
+        secondSubscription.unsubscribe();
+    });
+});
+
+describe('scheduled message transaction', () => {
+    it('rechecks ownership, status and time before marking a message as sent', async () => {
+        const update = vi.fn();
+        firestoreMocks.runTransaction.mockImplementationOnce(
+            async (_database: unknown, operation: (transaction: unknown) => Promise<boolean>) => (
+                operation({
+                    get: vi.fn().mockResolvedValue({
+                        exists: () => true,
+                        data: () => ({
+                            clientId: 'client-1',
+                            status: 'scheduled',
+                            scheduledAt: new firestoreMocks.Timestamp(0),
+                        }),
+                    }),
+                    update,
+                })
+            ),
+        );
+
+        await expect(processScheduledMessage('client-1', 'message-1')).resolves.toBe(true);
+        expect(update).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ status: 'sent' }),
+        );
+    });
+
+    it('does not update a message already claimed by another tab', async () => {
+        const update = vi.fn();
+        firestoreMocks.runTransaction.mockImplementationOnce(
+            async (_database: unknown, operation: (transaction: unknown) => Promise<boolean>) => (
+                operation({
+                    get: vi.fn().mockResolvedValue({
+                        exists: () => true,
+                        data: () => ({
+                            clientId: 'client-1',
+                            status: 'sent',
+                            scheduledAt: new firestoreMocks.Timestamp(0),
+                        }),
+                    }),
+                    update,
+                })
+            ),
+        );
+
+        await expect(processScheduledMessage('client-1', 'message-1')).resolves.toBe(false);
+        expect(update).not.toHaveBeenCalled();
     });
 });
 

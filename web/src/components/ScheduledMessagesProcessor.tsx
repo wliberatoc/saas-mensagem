@@ -1,57 +1,30 @@
 import { useEffect } from 'react';
 
-import { processDueMessages } from '../services/messages';
+import {
+    observeNextScheduledMessage,
+    processScheduledMessage,
+} from '../services/messages';
+import { createScheduledMessagesProcessor } from '../services/scheduled-messages';
 
 type ScheduledMessagesProcessorProps = {
     clientId: string;
 };
 
- const processingByClient = new Map<string, Promise<void>>();
-
-function requestProcessing(clientId: string) {
-    const currentProcessing = processingByClient.get(clientId);
-    if (currentProcessing) return currentProcessing;
-
-    const processing = processDueMessages(clientId)
-        .then(({ failed, found, processed }) => {
-            if (processed > 0) {
-                console.info('Mensagens agendadas processadas.', { found, processed });
-            }
-            if (failed > 0) {
-                console.error('Algumas mensagens agendadas não puderam ser processadas.', { failed, found });
-            }
-        })
-        .catch((error: unknown) => {
-            console.error('Não foi possível processar as mensagens agendadas.', error);
-        })
-        .finally(() => {
-            processingByClient.delete(clientId);
-        });
-
-    processingByClient.set(clientId, processing);
-    return processing;
-}
-
 export function ScheduledMessagesProcessor({ clientId }: ScheduledMessagesProcessorProps) {
     useEffect(() => {
-        void requestProcessing(clientId);
+        const subscription = createScheduledMessagesProcessor(
+            observeNextScheduledMessage(clientId),
+            (message) => processScheduledMessage(clientId, message.id),
+            {
+                onError: (error) => {
+                    console.error('Não foi possível processar a mensagem agendada.', error);
+                },
+            },
+        ).subscribe((processed) => {
+            if (processed) console.info('Mensagem agendada processada.');
+        });
 
-        const intervalId = window.setInterval(() => {
-            void requestProcessing(clientId);
-        }, 60_000);
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                void requestProcessing(clientId);
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            window.clearInterval(intervalId);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        return () => subscription.unsubscribe();
     }, [clientId]);
 
     return null;

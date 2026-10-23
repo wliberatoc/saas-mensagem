@@ -67,7 +67,7 @@ export function ContactFormDialog({
 
 		try {
 			if (contact) {
-				await updateContact(clientId, contact.id, {
+				await updateContact(clientId, contact, {
 					name: normalizedName,
 					phone: normalizedPhone,
 				});

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -15,7 +15,6 @@ import {
     deleteMessage,
     loadMoreMessages,
     observeMessages,
-    synchronizeMessageRecipientNames,
     updateScheduledMessage,
     type MessageCursor,
     type MessagePage,
@@ -130,12 +129,6 @@ function MessagesSectionContent({
     );
     const isLoading = firstPageState.status === 'loading' || contactsState.status === 'loading';
     const canLoadMore = historyStarted ? historyHasMore : firstPageState.data.hasMore;
-
-    useEffect(() => {
-        void synchronizeMessageRecipientNames(messages, contacts).catch((error: unknown) => {
-            console.error('Não foi possível sincronizar os nomes dos contatos nas mensagens.', error);
-        });
-    }, [contacts, messages]);
 
     function openCreateForm() {
         setEditingMessage(null);

@@ -196,4 +196,32 @@ describe('observeContacts', () => {
         second.unsubscribe();
         expect(listeners[1].teardown).toHaveBeenCalledTimes(1);
     });
+
+    it('does not trigger message writes when later contact snapshots arrive', () => {
+        const subscription = observeContacts('snapshot-client', 'connection').subscribe();
+
+        listeners[0].next(snapshot([{
+            id: 'contact-1',
+            data: {
+                clientId: 'snapshot-client',
+                connectionId: 'connection',
+                name: 'Primeiro nome',
+                phone: '11999999999',
+            },
+        }]));
+        listeners[0].next(snapshot([{
+            id: 'contact-1',
+            data: {
+                clientId: 'snapshot-client',
+                connectionId: 'connection',
+                name: 'Nome recebido depois',
+                phone: '11999999999',
+            },
+        }]));
+
+        expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
+        expect(firestoreMocks.updateDoc).not.toHaveBeenCalled();
+        expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+        subscription.unsubscribe();
+    });
 });

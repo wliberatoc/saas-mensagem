@@ -23,15 +23,22 @@ Frontend de um SaaS multiusuário para gerenciar conexões, contatos e mensagens
 5. Na aba de mensagens, seleciona um ou mais contatos, escreve o conteúdo e escolhe entre enviar agora ou agendar.
 6. Para cada contato selecionado é criado um documento de mensagem separado, com um único destinatário.
 7. Mensagens imediatas já são registradas como `sent`. Mensagens futuras começam como `scheduled`.
-8. Enquanto houver um usuário autenticado, o navegador procura mensagens vencidas ao iniciar a sessão, a cada minuto e quando a aba volta a ficar visível. As mensagens encontradas passam para `sent`.
+8. No modo padrão `browser`, o navegador observa somente a próxima mensagem agendada e cria um timer local para o horário dela. Quando a mensagem passa para `sent`, a próxima é selecionada automaticamente.
 
 O nome e o telefone do destinatário ficam gravados na mensagem como histórico. Enquanto o contato existir, seu nome atual é exibido; se o telefone mudar, o número usado na mensagem é identificado como antigo. Se o contato for excluído, o nome e o telefone históricos continuam visíveis e são identificados como pertencentes a um contato excluído.
 
 O estado da aba selecionada e o filtro de mensagens são mantidos na URL, portanto não são perdidos ao atualizar a página.
 
-## Agendamento sem Blaze
+## Modos de agendamento
 
-O processamento ativo ocorre no navegador porque a Cloud Function agendada não está publicada. Isso evita a dependência do plano Blaze, mas significa que uma mensagem não muda de estado enquanto nenhum usuário estiver autenticado no aplicativo.
+`VITE_SCHEDULER_MODE` controla onde as mensagens agendadas são processadas:
+
+- `browser` é o padrão e mantém o processador reativo local ativo;
+- `cloud` desativa completamente o listener e o timer locais, pois pressupõe que a Cloud Function `sendScheduledMessages` esteja publicada.
+
+O modo ativo continua sendo `browser` quando a variável não existe ou possui um valor inválido. Isso evita desativar o único processador por erro de configuração.
+
+No modo `browser`, o processamento ocorre no navegador porque a Cloud Function agendada não está publicada. Isso evita a dependência do plano Blaze, mas significa que uma mensagem não muda de estado enquanto nenhum usuário estiver autenticado no aplicativo.
 
 Se o horário vencer com o sistema fechado, a mensagem será processada no próximo acesso. O campo `sentAt` registra o momento em que esse processamento realmente aconteceu.
 
@@ -82,7 +89,10 @@ VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
+VITE_SCHEDULER_MODE=browser
 ```
+
+Não configure `VITE_SCHEDULER_MODE=cloud` antes de publicar e validar a Function. O modo cloud exige um projeto Firebase com plano compatível, faturamento ativo e Cloud Scheduler disponível.
 
 ## Comandos disponíveis
 
@@ -110,3 +120,12 @@ npx.cmd firebase-tools deploy --only hosting,firestore:rules,firestore:indexes -
 ```
 
 Esse comando não publica a Cloud Function reservada para uma possível implementação futura com o plano Blaze.
+
+Se futuramente o modo cloud for autorizado, o deploy da Function deverá ser feito separadamente:
+
+```powershell
+npm.cmd --prefix functions run build
+npx.cmd firebase-tools deploy --only functions:sendScheduledMessages --project saas-mensagens
+```
+
+Depois de confirmar a Function publicada e operacional, gere novamente o frontend com `VITE_SCHEDULER_MODE=cloud`. Não execute esse deploy em ambientes que permanecerão no modo `browser`.

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { ScheduledMessagesProcessor } from '../components/ScheduledMessagesProcessor';
+import { shouldRunBrowserScheduler } from '../config/scheduler';
 import { ConnectionsProvider } from '../contexts/ConnectionsProvider';
 import { useAuth } from '../hooks/useAuth';
 import { DashboardPage } from '../pages/Dashboard';
@@ -52,7 +53,9 @@ export const AppRoutes = () => {
 
     return (
         <ConnectionsProvider clientId={user.uid}>
-            <ScheduledMessagesProcessor clientId={user.uid} />
+            {shouldRunBrowserScheduler() && (
+                <ScheduledMessagesProcessor clientId={user.uid} />
+            )}
             {routes}
         </ConnectionsProvider>
     );

@@ -6,9 +6,9 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 initializeApp();
 
 const db = getFirestore();
+const SCHEDULED_MESSAGES_PAGE_SIZE = 500;
 
-// atenção essa função não é utilizada nesse projeto o motivo está no Readme.md do projeto
-//  mas ela serve como exemplo de como criar uma função agendada no firebase
+// This function remains unpublished while the project uses browser scheduling.
 export const sendScheduledMessages = onSchedule(
     {
         schedule: 'every 1 minutes',
@@ -16,42 +16,53 @@ export const sendScheduledMessages = onSchedule(
         region: 'southamerica-east1',
     },
     async () => {
-        const sentAt = Timestamp.now();
-        const scheduledMessages = await db
-            .collection('messages')
-            .where('status', '==', 'scheduled')
-            .where('scheduledAt', '<=', sentAt)
-            .get();
+        const dueAt = Timestamp.now();
+        let found = 0;
+        let processed = 0;
+        let failed = 0;
 
-        logger.info('Finished scanning for scheduled messages.', {
-            found: scheduledMessages.size,
-        });
+        while (true) {
+            const scheduledMessages = await db
+                .collection('messages')
+                .where('status', '==', 'scheduled')
+                .where('scheduledAt', '<=', dueAt)
+                .orderBy('scheduledAt', 'asc')
+                .limit(SCHEDULED_MESSAGES_PAGE_SIZE)
+                .get();
 
-        if (scheduledMessages.empty) {
-            return;
-        }
+            if (scheduledMessages.empty) break;
 
-        const updates = scheduledMessages.docs.map((messageDocument) => ({
-            reference: messageDocument.ref,
-            data: {
-                status: 'sent',
-                sentAt,
-                updatedAt: sentAt,
-            },
-        }));
-
-        for (let offset = 0; offset < updates.length; offset += 500) {
+            found += scheduledMessages.size;
+            const sentAt = Timestamp.now();
             const batch = db.batch();
 
-            updates.slice(offset, offset + 500).forEach(({ reference, data }) => {
-                batch.update(reference, data);
+            scheduledMessages.docs.forEach((messageDocument) => {
+                batch.update(messageDocument.ref, {
+                    status: 'sent',
+                    sentAt,
+                    updatedAt: sentAt,
+                });
             });
 
-            await batch.commit();
+            try {
+                await batch.commit();
+                processed += scheduledMessages.size;
+            } catch (error) {
+                failed += scheduledMessages.size;
+                logger.error('Failed to process a scheduled messages page.', {
+                    error,
+                    failed,
+                    found,
+                    processed,
+                });
+                throw error;
+            }
         }
 
-        logger.info('Scheduled messages marked as sent.', {
-            updated: scheduledMessages.size,
+        logger.info('Finished processing scheduled messages.', {
+            failed,
+            found,
+            processed,
         });
     },
 );

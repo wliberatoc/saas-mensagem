@@ -16,10 +16,10 @@ import {
 	TextField,
 } from '@mui/material';
 
-import { createContact, updateContact } from '../services/contacts';
-import type { Contact } from '../types/contact';
-import type { Connection } from '../types/connection';
-import { formatPhone } from '../utils/phone';
+import { createContact, updateContact } from '../../../services/contacts';
+import type { Contact } from '../../../types/contact';
+import type { Connection } from '../../../types/connection';
+import { formatPhone } from '../../../utils/phone';
 
 type ContactFormDialogProps = {
 	clientId: string;

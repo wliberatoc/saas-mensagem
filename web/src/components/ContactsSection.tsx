@@ -18,8 +18,8 @@ import {
 import { subscribeToContacts } from '../services/contacts';
 import type { Contact } from '../types/contact';
 import type { Connection } from '../types/connection';
-import { ContactFormDialog } from './ContactFormDialog';
-import { DeleteContactDialog } from './DeleteContactDialog';
+import { ContactFormDialog } from './modals/Contacts/ContactFormDialog';
+import { DeleteContactDialog } from './modals/Contacts/DeleteContactDialog';
 
 type ContactsSectionProps = {
 	clientId: string;
@@ -98,7 +98,7 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 					elevation={0}
 					className="grid min-h-48 place-items-center rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center"
 				>
-					<div>
+						<div>
 						<div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-violet-50 text-xl font-bold text-violet-600">
 							0
 						</div>

@@ -9,8 +9,8 @@ import {
 	Typography,
 } from '@mui/material';
 
-import { deleteContact } from '../services/contacts';
-import type { Contact } from '../types/contact';
+import { deleteContact } from '../../../services/contacts';
+import type { Contact } from '../../../types/contact';
 
 type DeleteContactDialogProps = {
 	contact: Contact | null;

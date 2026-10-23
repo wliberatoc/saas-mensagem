@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
     Alert, Box, Button, Card, CardActions, CardContent, CircularProgress,
     Divider, Paper, Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
-import {
-    subscribeToConnections,
-} from '../services/connections';
+import { useConnections } from '../hooks/useConnections';
 import type { Connection } from '../types/connection';
 import { ConnectionFormDialog } from './modals/Connections/ConnectionFormDialog';
 import { DeleteConnectionDialog } from './modals/Connections/DeleteConnectionDialog';
@@ -23,24 +21,13 @@ function formatCreatedAt(connection: Connection) {
 
 export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
     const navigate = useNavigate();
-    const [connections, setConnections] = useState<Connection[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const connectionsState = useConnections();
+    const connections = connectionsState.data;
+    const isLoading = connectionsState.status === 'loading';
     const [errorMessage, setErrorMessage] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
     const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
-
-    useEffect(() => subscribeToConnections(
-        clientId,
-        (updatedConnections) => {
-            setConnections(updatedConnections);
-            setIsLoading(false);
-        },
-        () => {
-            setErrorMessage('Não foi possível carregar suas conexões. Verifique as regras do Firestore.');
-            setIsLoading(false);
-        },
-    ), [clientId]);
 
     function openCreateForm() {
         setEditingConnection(null);
@@ -63,6 +50,11 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
                 </div>
                 <Button variant="contained" onClick={openCreateForm} sx={{ textTransform: 'none', fontWeight: 700 }}>Nova conexão</Button>
             </div>
+            {connectionsState.status === 'error' && (
+                <Alert severity="error" className="mb-6">
+                    Não foi possível carregar suas conexões. Verifique as regras do Firestore.
+                </Alert>
+            )}
             {errorMessage && <Alert severity="error" className="mb-6" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
             {isLoading ? (
                 <Box className="grid min-h-64 place-items-center"><CircularProgress /></Box>

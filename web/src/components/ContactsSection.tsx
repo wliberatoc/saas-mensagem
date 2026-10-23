@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
 	Alert,
 	Box,
@@ -15,7 +15,7 @@ import {
 	Typography,
 } from '@mui/material';
 
-import { subscribeToContacts } from '../services/contacts';
+import type { AsyncState } from '../hooks/useObservableState';
 import type { Contact } from '../types/contact';
 import type { Connection } from '../types/connection';
 import { ContactFormDialog } from './modals/Contacts/ContactFormDialog';
@@ -25,30 +25,21 @@ type ContactsSectionProps = {
 	clientId: string;
 	connectionId: string;
 	connections: Connection[];
+	contactsState: AsyncState<Contact[]>;
 };
 
-export function ContactsSection({ clientId, connectionId, connections }: ContactsSectionProps) {
-	const [contacts, setContacts] = useState<Contact[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
+export function ContactsSection({
+	clientId,
+	connectionId,
+	connections,
+	contactsState,
+}: ContactsSectionProps) {
+	const contacts = contactsState.data;
+	const isLoading = contactsState.status === 'loading';
 	const [errorMessage, setErrorMessage] = useState('');
 	const [isFormOpen, setIsFormOpen] = useState(false);
 	const [editingContact, setEditingContact] = useState<Contact | null>(null);
 	const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
-
-	useEffect(() => {
-		return subscribeToContacts(
-			clientId,
-			connectionId,
-			updatedContacts => {
-				setContacts(updatedContacts);
-				setIsLoading(false);
-			},
-			() => {
-				setErrorMessage('Não foi possível carregar seus contatos. Verifique as regras do Firestore.');
-				setIsLoading(false);
-			}
-		);
-	}, [clientId, connectionId]);
 
 	function openCreateForm() {
 		setEditingContact(null);
@@ -79,6 +70,12 @@ export function ContactsSection({ clientId, connectionId, connections }: Contact
 					Novo contato
 				</Button>
 			</div>
+
+			{contactsState.status === 'error' && (
+				<Alert severity="error" className="mb-5">
+					Não foi possível carregar seus contatos. Verifique as regras do Firestore.
+				</Alert>
+			)}
 
 			{errorMessage && (
 				<Alert severity="error" className="mb-5" onClose={() => setErrorMessage('')}>

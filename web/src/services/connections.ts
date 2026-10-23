@@ -11,83 +11,67 @@ import {
     updateDoc,
     where,
     writeBatch,
-    type FirestoreError,
-    type Unsubscribe,
 } from 'firebase/firestore';
+import { distinctUntilChanged, map, type Observable } from 'rxjs';
 
 import type { Connection, ConnectionInput } from '../types/connection';
 import { db } from './firebase';
+import { fromFirestoreSubscription, shareLatest } from './firestore-observable';
 
-export function subscribeToConnections(
-    clientId: string,
-    onConnectionsChange: (connections: Connection[]) => void,
-    onError: (error: FirestoreError) => void,
-): Unsubscribe {
+const connectionsByClient = new Map<string, Observable<Connection[]>>();
+
+export function observeConnections(clientId: string): Observable<Connection[]> {
+    const cached = connectionsByClient.get(clientId);
+    if (cached) return cached;
+
     const connectionsQuery = query(
         collection(db, 'connections'),
         where('clientId', '==', clientId),
     );
+    const connections = fromFirestoreSubscription<Connection[]>((onNext, onError) => (
+        onSnapshot(
+            connectionsQuery,
+            (snapshot) => {
+                const updatedConnections = snapshot.docs
+                    .map((connectionDocument) => {
+                        const data = connectionDocument.data();
 
-    return onSnapshot(
-        connectionsQuery,
-        (snapshot) => {
-            const connections = snapshot.docs
-                .map((connectionDocument) => {
-                    const data = connectionDocument.data();
+                        return {
+                            id: connectionDocument.id,
+                            clientId: data.clientId as string,
+                            name: data.name as string,
+                            createdAt: data.createdAt instanceof Timestamp
+                                ? data.createdAt
+                                : null,
+                            updatedAt: data.updatedAt instanceof Timestamp
+                                ? data.updatedAt
+                                : null,
+                        } satisfies Connection;
+                    })
+                    .sort((first, second) => (
+                        (second.createdAt?.toMillis() ?? 0)
+                        - (first.createdAt?.toMillis() ?? 0)
+                    ));
 
-                    return {
-                        id: connectionDocument.id,
-                        clientId: data.clientId as string,
-                        name: data.name as string,
-                        createdAt: data.createdAt instanceof Timestamp
-                            ? data.createdAt
-                            : null,
-                        updatedAt: data.updatedAt instanceof Timestamp
-                            ? data.updatedAt
-                            : null,
-                    } satisfies Connection;
-                })
-                .sort((first, second) => (
-                    (second.createdAt?.toMillis() ?? 0)
-                    - (first.createdAt?.toMillis() ?? 0)
-                ));
+                onNext(updatedConnections);
+            },
+            onError,
+        )
+    )).pipe(shareLatest());
 
-            onConnectionsChange(connections);
-        },
-        onError,
-    );
+    connectionsByClient.set(clientId, connections);
+    return connections;
 }
 
-export function subscribeToConnection(
-    connectionId: string,
+export function observeConnection(
     clientId: string,
-    onConnectionChange: (connection: Connection | null) => void,
-    onError: (error: FirestoreError) => void,
-): Unsubscribe {
-    return onSnapshot(
-        doc(db, 'connections', connectionId),
-        (snapshot) => {
-            if (!snapshot.exists()) {
-                onConnectionChange(null);
-                return;
-            }
-
-            const data = snapshot.data();
-
-            if (data.clientId !== clientId) {
-                onConnectionChange(null);
-                return;
-            }
-
-            onConnectionChange({
-                id: snapshot.id,
-                clientId: data.clientId as string,
-                name: data.name as string,
-                createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
-                updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : null,
-            });
-        },
-        onError,
+    connectionId: string,
+): Observable<Connection | null> {
+    return observeConnections(clientId).pipe(
+        map((connections) => (
+            connections.find((connection) => connection.id === connectionId) ?? null
+        )),
+        distinctUntilChanged(),
     );
 }
 

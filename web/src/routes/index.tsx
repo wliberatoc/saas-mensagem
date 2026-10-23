@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { ScheduledMessagesProcessor } from '../components/ScheduledMessagesProcessor';
+import { ConnectionsProvider } from '../contexts/ConnectionsProvider';
 import { useAuth } from '../hooks/useAuth';
 import { DashboardPage } from '../pages/Dashboard';
 import { ConnectionDetailsPage } from '../pages/ConnectionDetails';
@@ -20,10 +21,8 @@ export const AppRoutes = () => {
         );
     }
 
-    return (
-        <>
-            {user && <ScheduledMessagesProcessor clientId={user.uid} />}
-            <Routes>
+    const routes = (
+        <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/cadastro" element={<RegisterPage />} />
                 <Route
@@ -46,7 +45,15 @@ export const AppRoutes = () => {
                     path="*"
                     element={<Navigate to={user ? '/dashboard' : '/login'} replace />}
                 />
-            </Routes>
-        </>
+        </Routes>
+    );
+
+    if (!user) return routes;
+
+    return (
+        <ConnectionsProvider clientId={user.uid}>
+            <ScheduledMessagesProcessor clientId={user.uid} />
+            {routes}
+        </ConnectionsProvider>
     );
 };

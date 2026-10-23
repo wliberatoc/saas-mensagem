@@ -7,7 +7,7 @@ import {
     TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
 
-import { subscribeToContacts } from '../services/contacts';
+import type { AsyncState } from '../hooks/useObservableState';
 import {
     createMessages,
     deleteMessage,
@@ -21,6 +21,7 @@ import type { Message, MessageStatus } from '../types/message';
 type MessagesSectionProps = {
     clientId: string;
     connectionId: string;
+    contactsState: AsyncState<Contact[]>;
 };
 
 type MessageFilter = 'all' | MessageStatus;
@@ -41,11 +42,11 @@ function formatDate(date: Date | null) {
     return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
-export function MessagesSection({ clientId, connectionId }: MessagesSectionProps) {
+export function MessagesSection({ clientId, connectionId, contactsState }: MessagesSectionProps) {
     const [searchParams, setSearchParams] = useSearchParams();
     const [messages, setMessages] = useState<Message[]>([]);
-    const [contacts, setContacts] = useState<Contact[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const contacts = contactsState.data;
+    const [areMessagesLoading, setAreMessagesLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -61,6 +62,7 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     const filter: MessageFilter = statusParam === 'scheduled' || statusParam === 'sent'
         ? statusParam
         : 'all';
+    const isLoading = areMessagesLoading || contactsState.status === 'loading';
 
     function handleFilterChange(value: MessageFilter) {
         const updatedParams = new URLSearchParams(searchParams);
@@ -72,34 +74,20 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
     }
 
     useEffect(() => {
-        let messagesLoaded = false;
         const unsubscribeMessages = subscribeToMessages(
             clientId,
             connectionId,
             (updatedMessages) => {
-                messagesLoaded = true;
                 setMessages(updatedMessages);
-                setIsLoading(false);
+                setAreMessagesLoading(false);
             },
             () => {
                 setErrorMessage('Não foi possível carregar as mensagens.');
-                setIsLoading(false);
-            },
-        );
-        const unsubscribeContacts = subscribeToContacts(
-            clientId,
-            connectionId,
-            setContacts,
-            () => {
-                if (!messagesLoaded) setIsLoading(false);
-                setErrorMessage('Não foi possível carregar os contatos disponíveis.');
+                setAreMessagesLoading(false);
             },
         );
 
-        return () => {
-            unsubscribeMessages();
-            unsubscribeContacts();
-        };
+        return unsubscribeMessages;
     }, [clientId, connectionId]);
 
     const filteredMessages = useMemo(() => (
@@ -217,6 +205,11 @@ export function MessagesSection({ clientId, connectionId }: MessagesSectionProps
             </div>
 
             {contacts.length === 0 && !isLoading && <Alert severity="info" className="mb-5">Cadastre ao menos um contato nesta conexão para criar mensagens.</Alert>}
+            {contactsState.status === 'error' && (
+                <Alert severity="error" className="mb-5">
+                    Não foi possível carregar os contatos disponíveis.
+                </Alert>
+            )}
             {errorMessage && <Alert severity="error" className="mb-5" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
 
             <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, value: MessageFilter | null) => value && handleFilterChange(value)} sx={{ mb: 3 }}>

@@ -11,52 +11,57 @@ import {
     updateDoc,
     where,
     writeBatch,
-    type FirestoreError,
-    type Unsubscribe,
 } from 'firebase/firestore';
+import type { Observable } from 'rxjs';
 
 import type { Contact, ContactInput, ContactUpdateInput } from '../types/contact';
 import { db } from './firebase';
+import { fromFirestoreSubscription, shareLatest } from './firestore-observable';
 
-export function subscribeToContacts(
-    clientId: string,
-    connectionId: string,
-    onContactsChange: (contacts: Contact[]) => void,
-    onError: (error: FirestoreError) => void,
-): Unsubscribe {
+const contactsByConnection = new Map<string, Observable<Contact[]>>();
+
+export function observeContacts(clientId: string, connectionId: string): Observable<Contact[]> {
+    const cacheKey = JSON.stringify([clientId, connectionId]);
+    const cached = contactsByConnection.get(cacheKey);
+    if (cached) return cached;
+
     const contactsQuery = query(
         collection(db, 'contacts'),
         where('clientId', '==', clientId),
         where('connectionId', '==', connectionId),
     );
+    const contacts = fromFirestoreSubscription<Contact[]>((onNext, onError) => (
+        onSnapshot(
+            contactsQuery,
+            (snapshot) => {
+                const updatedContacts = snapshot.docs
+                    .map((contactDocument) => {
+                        const data = contactDocument.data();
 
-    return onSnapshot(
-        contactsQuery,
-        (snapshot) => {
-            const contacts = snapshot.docs
-                .map((contactDocument) => {
-                    const data = contactDocument.data();
+                        return {
+                            id: contactDocument.id,
+                            clientId: data.clientId as string,
+                            connectionId: data.connectionId as string,
+                            name: data.name as string,
+                            phone: data.phone as string,
+                            createdAt: data.createdAt instanceof Timestamp
+                                ? data.createdAt
+                                : null,
+                            updatedAt: data.updatedAt instanceof Timestamp
+                                ? data.updatedAt
+                                : null,
+                        } satisfies Contact;
+                    })
+                    .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'));
 
-                    return {
-                        id: contactDocument.id,
-                        clientId: data.clientId as string,
-                        connectionId: data.connectionId as string,
-                        name: data.name as string,
-                        phone: data.phone as string,
-                        createdAt: data.createdAt instanceof Timestamp
-                            ? data.createdAt
-                            : null,
-                        updatedAt: data.updatedAt instanceof Timestamp
-                            ? data.updatedAt
-                            : null,
-                    } satisfies Contact;
-                })
-                .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'));
+                onNext(updatedContacts);
+            },
+            onError,
+        )
+    )).pipe(shareLatest());
 
-            onContactsChange(contacts);
-        },
-        onError,
-    );
+    contactsByConnection.set(cacheKey, contacts);
+    return contacts;
 }
 
 export function createContact(clientId: string, contact: ContactInput) {

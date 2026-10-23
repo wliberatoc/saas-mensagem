@@ -1,16 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert, Box, Button, Card, CardActions, CardContent, CircularProgress,
-    Dialog, DialogActions, DialogContent, DialogTitle, Divider, Paper,
-    Stack, TextField, Typography,
+    Divider, Paper, Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
 import {
-    createConnection, deleteConnection,
-    subscribeToConnections, updateConnection,
+    subscribeToConnections,
 } from '../services/connections';
 import type { Connection } from '../types/connection';
+import { ConnectionFormDialog } from './modals/Connections/ConnectionFormDialog';
+import { DeleteConnectionDialog } from './modals/Connections/DeleteConnectionDialog';
 
 type ConnectionsSectionProps = { clientId: string };
 
@@ -25,14 +25,10 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
     const navigate = useNavigate();
     const [connections, setConnections] = useState<Connection[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [formErrorMessage, setFormErrorMessage] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
     const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
-    const [name, setName] = useState('');
 
     useEffect(() => subscribeToConnections(
         clientId,
@@ -48,51 +44,12 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
 
     function openCreateForm() {
         setEditingConnection(null);
-        setName('');
-        setFormErrorMessage('');
         setIsFormOpen(true);
     }
 
     function openEditForm(connection: Connection) {
         setEditingConnection(connection);
-        setName(connection.name);
-        setFormErrorMessage('');
         setIsFormOpen(true);
-    }
-
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        const normalizedName = name.trim();
-        if (!normalizedName) {
-            setFormErrorMessage('Informe o nome da conexão.');
-            return;
-        }
-
-        setIsSaving(true);
-        setFormErrorMessage('');
-        try {
-            if (editingConnection) await updateConnection(editingConnection.id, { name: normalizedName });
-            else await createConnection(clientId, { name: normalizedName });
-            setIsFormOpen(false);
-        } catch {
-            setFormErrorMessage(`Não foi possível ${editingConnection ? 'atualizar' : 'criar'} a conexão.`);
-        } finally {
-            setIsSaving(false);
-        }
-    }
-
-    async function handleDelete() {
-        if (!connectionToDelete) return;
-        setIsDeleting(true);
-        setErrorMessage('');
-        try {
-            await deleteConnection(clientId, connectionToDelete.id);
-            setConnectionToDelete(null);
-        } catch {
-            setErrorMessage('Não foi possível excluir a conexão.');
-        } finally {
-            setIsDeleting(false);
-        }
     }
 
     return (
@@ -138,30 +95,20 @@ export function ConnectionsSection({ clientId }: ConnectionsSectionProps) {
                 </div>
             )}
 
-            <Dialog open={isFormOpen} onClose={() => !isSaving && setIsFormOpen(false)} fullWidth maxWidth="sm">
-                <Box component="form" onSubmit={handleSubmit}>
-                    <DialogTitle>{editingConnection ? 'Editar conexão' : 'Nova conexão'}</DialogTitle>
-                    <DialogContent>
-                        <Stack spacing={3} sx={{ pt: 1 }}>
-                            {formErrorMessage && <Alert severity="error">{formErrorMessage}</Alert>}
-                            <TextField label="Nome" value={name} onChange={(event) => setName(event.target.value)} required autoFocus fullWidth slotProps={{ htmlInput: { maxLength: 120 } }} />
-                        </Stack>
-                    </DialogContent>
-                    <DialogActions sx={{ px: 3, pb: 3 }}>
-                        <Button onClick={() => setIsFormOpen(false)} disabled={isSaving}>Cancelar</Button>
-                        <Button type="submit" variant="contained" disabled={isSaving} sx={{ minWidth: 100 }}>{isSaving ? <CircularProgress size={21} color="inherit" /> : 'Salvar'}</Button>
-                    </DialogActions>
-                </Box>
-            </Dialog>
+            {isFormOpen && (
+                <ConnectionFormDialog
+                    clientId={clientId}
+                    connection={editingConnection}
+                    onClose={() => setIsFormOpen(false)}
+                />
+            )}
 
-            <Dialog open={Boolean(connectionToDelete)} onClose={() => !isDeleting && setConnectionToDelete(null)} fullWidth maxWidth="xs">
-                <DialogTitle>Excluir conexão?</DialogTitle>
-                <DialogContent><Typography color="text.secondary">A conexão <strong>{connectionToDelete?.name}</strong> será excluída permanentemente, você perderá os dados associados como contatos e mensagens.</Typography></DialogContent>
-                <DialogActions sx={{ px: 3, pb: 3 }}>
-                    <Button onClick={() => setConnectionToDelete(null)} disabled={isDeleting}>Cancelar</Button>
-                    <Button color="error" variant="contained" onClick={handleDelete} disabled={isDeleting}>{isDeleting ? <CircularProgress size={21} color="inherit" /> : 'Excluir'}</Button>
-                </DialogActions>
-            </Dialog>
+            <DeleteConnectionDialog
+                clientId={clientId}
+                connection={connectionToDelete}
+                onClose={() => setConnectionToDelete(null)}
+                onError={setErrorMessage}
+            />
         </section>
     );
 }

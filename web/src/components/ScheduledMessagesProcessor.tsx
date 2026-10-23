@@ -6,7 +6,7 @@ type ScheduledMessagesProcessorProps = {
     clientId: string;
 };
 
-const processingByClient = new Map<string, Promise<void>>();
+ const processingByClient = new Map<string, Promise<void>>();
 
 function requestProcessing(clientId: string) {
     const currentProcessing = processingByClient.get(clientId);
